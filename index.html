@@ -130,7 +130,25 @@ const MIO_DOB = '2024-10-15';
 // origins at console.cloud.google.com → APIs & Services → Credentials → OAuth client.
 const GDRIVE_CLIENT_ID = '428293773028-hdmpetjd007bahi6kmm4ku61j8gss3mf.apps.googleusercontent.com';
 const GDRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
-const APP_VERSION = '1.0.0-phase1';
+const APP_VERSION = '1.0.0-phase2';
+
+// CDC 18-month milestone checklist (all five domains)
+const CDC_ITEMS = [
+  { domain:'language',         item:'Says 3+ words besides mama/dada' },
+  { domain:'language',         item:'Points to ask for something or get help' },
+  { domain:'language',         item:'Follows 1-step direction without gesture' },
+  { domain:'cognitive',        item:'Copies simple chores (sweeping, wiping)' },
+  { domain:'cognitive',        item:'Plays with toys simply (pushes car, stacks blocks)' },
+  { domain:'social_emotional', item:'Points to show you interesting things' },
+  { domain:'social_emotional', item:'Shows affection (hugs, kisses)' },
+  { domain:'social_emotional', item:'Explores but checks you are near' },
+  { domain:'motor_gross',      item:'Walks well on own' },
+  { domain:'motor_gross',      item:'Climbs on/off furniture' },
+  { domain:'motor_fine',       item:'Scribbles with crayons' },
+  { domain:'motor_fine',       item:'Stacks 2+ objects' },
+  { domain:'adaptive',         item:'Feeds self with fingers or spoon' },
+  { domain:'adaptive',         item:'Drinks from open cup' },
+];
 
 // ═══ DATA MODEL ════════════════════════════════════════════════════════════
 const DEF = {
@@ -148,6 +166,7 @@ const DEF = {
     driveFileId: null,
     theme: 'dark',
     checkinDoneDate: null,
+    onboardingDone: false,
     proxyUrl: 'https://claude-proxy.raffy-tanpho.workers.dev'
   }
 };
@@ -155,6 +174,7 @@ const DEF = {
 // ═══ STATE ═════════════════════════════════════════════════════════════════
 let data = clone(DEF);
 let view = 'home';
+let onboardStep = 0;
 let gdriveToken = null;
 let gdriveFileId = null;
 let gdriveRefreshTimer = null;
@@ -235,6 +255,11 @@ async function loadData() {
 async function launchApp() {
   await loadData();
   await tryRestoreAuth();
+  // Pre-seed Mio's known words/milestones before first onboarding
+  if (!data.settings?.onboardingDone && (data.words||[]).length === 0) {
+    seedKnownData();
+    await save();
+  }
   sv('home');
 }
 
@@ -407,6 +432,8 @@ function updateHdr() {
 
 // ═══ HOME VIEW ════════════════════════════════════════════════════════════
 function buildHome() {
+  if (!data.settings?.onboardingDone) return buildOnboarding();
+
   const dob = data.child?.dob || MIO_DOB;
   const mo = ageMonths(dob);
   const wordCount = (data.words || []).length;
@@ -414,8 +441,8 @@ function buildHome() {
   const lastGrowth = (data.growth || []).slice().sort((a,b) => b.date.localeCompare(a.date))[0];
 
   const phases = [
-    { done: true,  label: 'Phase 1: Scaffold (you\'re here!)' },
-    { done: false, label: 'Phase 2: Onboarding + baby book data seed' },
+    { done: true,  label: 'Phase 1: Scaffold' },
+    { done: true,  label: 'Phase 2: Onboarding + baseline data' },
     { done: false, label: 'Phase 3: Daily check-in engine' },
     { done: false, label: 'Phase 4: Milestones + Trends views' },
     { done: false, label: 'Phase 5: Growth + WHO percentile curves' },
@@ -476,6 +503,271 @@ function buildHome() {
     </div>
     <div class="gap"></div>
   `;
+}
+
+// ═══ SEED KNOWN DATA (pre-populate from Mio's profile before onboarding) ═
+function seedKnownData() {
+  if ((data.words||[]).length === 0) {
+    data.words = [
+      { id: uid(), word: 'mama', meaning: 'mother', language: 'Filipino', firstHeard: '2026-06-02' },
+      { id: uid(), word: 'ba',   meaning: '(uncertain — ball?)', language: 'Filipino', firstHeard: '2026-06-02' },
+    ];
+  }
+  if ((data.milestones||[]).length === 0) {
+    data.milestones = [
+      { id: uid(), date:'2026-06-02', ageMonths:19, domain:'language',  item:'Says "mama"',                                    status:'reached',  note:'Reliable' },
+      { id: uid(), date:'2026-06-02', ageMonths:19, domain:'language',  item:'Says "ba" (similar sound)',                      status:'reached',  note:'Reliable' },
+      { id: uid(), date:'2026-06-02', ageMonths:19, domain:'language',  item:'Tries to say 3+ words besides mama/dada (CDC 18mo)', status:'not-yet', note:'Focus area' },
+      { id: uid(), date:'2026-06-02', ageMonths:19, domain:'cognitive', item:'Strong comprehension and memory',                status:'reached',  note:'Interacts, understands, remembers' },
+    ];
+  }
+}
+
+// ═══ ONBOARDING ════════════════════════════════════════════════════════════
+const ONBOARD_STEPS = ['Welcome','Measurements','Words','Milestones','Done'];
+
+function obProgress() {
+  return `
+    <div style="display:flex;align-items:center;justify-content:center;gap:0;margin-bottom:20px">
+      ${ONBOARD_STEPS.map((l,i) => `
+        ${i>0 ? `<div style="height:1px;width:18px;background:${i<=onboardStep?'var(--accent)':'var(--border)'}"></div>` : ''}
+        <div style="display:flex;flex-direction:column;align-items:center;gap:3px">
+          <div style="width:9px;height:9px;border-radius:50%;background:${i<=onboardStep?'var(--accent)':'var(--border)'}"></div>
+          ${i===onboardStep ? `<div style="font-size:9px;color:var(--accent);font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-top:2px;white-space:nowrap">${l}</div>` : ''}
+        </div>
+      `).join('')}
+    </div>`;
+}
+
+function buildOnboarding() {
+  if (onboardStep === 0) return buildObWelcome();
+  if (onboardStep === 1) return buildObMeasurements();
+  if (onboardStep === 2) return buildObWords();
+  if (onboardStep === 3) return buildObMilestones();
+  return buildObFinish();
+}
+
+function buildObWelcome() {
+  return `
+    <div style="padding:16px 13px">
+      ${obProgress()}
+      <div class="card" style="text-align:center;padding:24px 16px">
+        <div style="font-size:48px;margin-bottom:12px">👶</div>
+        <div style="font-size:20px;font-weight:800;margin-bottom:8px">Set up Mio's baseline</div>
+        <div style="font-size:14px;color:var(--muted);line-height:1.6;margin-bottom:20px">
+          Takes about 2 minutes. Skip anything you don't have handy — the daily check-in fills in the rest over time.
+        </div>
+        <button onclick="nextOnboard()" style="width:100%;background:var(--accent);color:#fff;border:none;border-radius:var(--rs);padding:14px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:10px">Start setup →</button>
+        <button onclick="skipOnboard()" style="width:100%;background:var(--surface2);color:var(--muted);border:1px solid var(--border);border-radius:var(--rs);padding:11px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;margin-bottom:10px">Skip for now</button>
+        <button onclick="importOnboardData()" style="background:none;border:none;color:var(--blue);font-size:13px;cursor:pointer;font-family:inherit;text-decoration:underline">Import from JSON (baby book data ready?)</button>
+      </div>
+    </div><div class="gap"></div>`;
+}
+
+function buildObMeasurements() {
+  return `
+    <div style="padding:16px 13px">
+      ${obProgress()}
+      <div class="card">
+        <div class="card-title">Latest Measurements</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:14px">From most recent well-child visit or home scale. All metric. Leave blank if you don't have them — add later in Growth.</div>
+        <div class="mf">
+          <div class="ml">Date measured</div>
+          <input class="mi" id="obDate" type="date" value="${today()}">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+          <div><div class="ml">Weight (kg)</div><input class="mi" id="obWt" type="number" step="0.01" inputmode="decimal" placeholder="e.g. 10.2"></div>
+          <div><div class="ml">Height (cm)</div><input class="mi" id="obHt" type="number" step="0.1"  inputmode="decimal" placeholder="e.g. 80"></div>
+          <div><div class="ml">Head (cm)</div><input class="mi" id="obHd" type="number" step="0.1"  inputmode="decimal" placeholder="e.g. 47"></div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;padding:0 0 10px">
+        <button onclick="prevOnboard()" class="mb cancel" style="max-width:80px">← Back</button>
+        <button onclick="saveObMeasurements()" class="mb primary">Next →</button>
+      </div>
+    </div><div class="gap"></div>`;
+}
+
+function buildObWords() {
+  const words = data.words || [];
+  return `
+    <div style="padding:16px 13px">
+      ${obProgress()}
+      <div class="card">
+        <div class="card-title">Words &amp; Sounds — ${words.length} so far</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:12px">All languages combined. Partial words count. Add one at a time.</div>
+        ${words.length ? `
+          <div style="margin-bottom:12px;max-height:150px;overflow-y:auto">
+            ${words.map(w => `
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border)">
+                <div><span style="font-weight:700">${esc(w.word)}</span>${w.meaning?`<span style="color:var(--muted);font-size:12px"> · ${esc(w.meaning)}</span>`:''}<span style="font-size:11px;color:var(--accent-l);margin-left:6px">${esc(w.language||'')}</span></div>
+                <button onclick="removeWord('${w.id}')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px;line-height:1;padding:0 4px">×</button>
+              </div>`).join('')}
+          </div>` : ''}
+        <div style="display:flex;gap:6px;margin-bottom:6px">
+          <input class="mi" id="obWord"    placeholder="Word/sound (e.g. ba, dada)" style="flex:2">
+          <input class="mi" id="obMeaning" placeholder="Means?"                      style="flex:1">
+        </div>
+        <div style="display:flex;gap:6px;margin-bottom:6px">
+          <select class="mi" id="obLang" style="flex:1">
+            <option value="Filipino">Filipino</option>
+            <option value="English">English</option>
+            <option value="Other">Other</option>
+          </select>
+          <button onclick="addObWord()" style="background:var(--accent);color:#fff;border:none;border-radius:var(--rs);padding:10px 16px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">+ Add</button>
+        </div>
+        <div style="font-size:12px;color:var(--muted)">The daily check-in will prompt you for new words every day once Phase 3 ships.</div>
+      </div>
+      <div style="display:flex;gap:8px;padding:0 0 10px">
+        <button onclick="prevOnboard()" class="mb cancel" style="max-width:80px">← Back</button>
+        <button onclick="nextOnboard()" class="mb primary">Next →</button>
+      </div>
+    </div><div class="gap"></div>`;
+}
+
+function buildObMilestones() {
+  const DLABELS = { language:'Language', cognitive:'Cognitive', social_emotional:'Social / Emotional', motor_gross:'Gross Motor', motor_fine:'Fine Motor', adaptive:'Self-Help' };
+  const domains = ['language','cognitive','social_emotional','motor_gross','motor_fine','adaptive'];
+
+  function statusOf(item) {
+    return (data.milestones||[]).find(m => m.item === item)?.status || null;
+  }
+  function sBtn(item, status, label, color) {
+    const on = statusOf(item) === status;
+    return `<button onclick="setObMilestone('${item.replace(/'/g,'\\\'').replace(/"/g,'&quot;')}','${status}')"
+      style="flex:1;padding:7px 2px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;
+        border:1.5px solid ${on?color:'var(--border)'};background:${on?color+'22':'var(--surface2)'};color:${on?color:'var(--muted)'}">${label}</button>`;
+  }
+
+  return `
+    <div style="padding:16px 13px">
+      ${obProgress()}
+      <div class="card">
+        <div class="card-title">Milestone Snapshot (CDC 18-month)</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:14px">One tap per item. Skip anything you're unsure of — the daily check-in will fill these in over time.</div>
+        ${domains.map(domain => {
+          const items = CDC_ITEMS.filter(x => x.domain === domain);
+          if (!items.length) return '';
+          return `<div style="margin-bottom:14px">
+            <div style="font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--accent-l);font-weight:700;margin-bottom:8px">${DLABELS[domain]}</div>
+            ${items.map(ci => `
+              <div style="margin-bottom:10px">
+                <div style="font-size:13px;font-weight:600;margin-bottom:6px">${esc(ci.item)}</div>
+                <div style="display:flex;gap:5px">
+                  ${sBtn(ci.item,'reached','✓ Yes','var(--green)')}
+                  ${sBtn(ci.item,'attempting','~ Working','var(--yellow)')}
+                  ${sBtn(ci.item,'not-yet','✗ Not yet','var(--muted)')}
+                </div>
+              </div>`).join('')}
+          </div>`;
+        }).join('')}
+      </div>
+      <div style="display:flex;gap:8px;padding:0 0 10px">
+        <button onclick="prevOnboard()" class="mb cancel" style="max-width:80px">← Back</button>
+        <button onclick="finishOnboard()" class="mb primary">Finish ✓</button>
+      </div>
+    </div><div class="gap"></div>`;
+}
+
+function buildObFinish() {
+  const wc = (data.words||[]).length;
+  const gc = (data.growth||[]).length;
+  const mc = (data.milestones||[]).filter(m => m.status==='reached').length;
+  return `
+    <div style="padding:16px 13px">
+      ${obProgress()}
+      <div class="card" style="text-align:center;padding:28px 16px;margin-bottom:10px">
+        <div style="font-size:48px;margin-bottom:12px">🎉</div>
+        <div style="font-size:20px;font-weight:800;margin-bottom:8px">Baseline set!</div>
+        <div style="font-size:14px;color:var(--muted);margin-bottom:20px">${wc} word${wc!==1?'s':''} · ${gc} measurement${gc!==1?'s':''} · ${mc} milestone${mc!==1?'s':''} reached</div>
+        <button onclick="completeOnboard()" style="width:100%;background:var(--accent);color:#fff;border:none;border-radius:var(--rs);padding:14px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit">Open Mio Tracker →</button>
+      </div>
+      <div class="card" style="border-style:dashed">
+        <div class="card-title">📸 Baby book photos?</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.6">Share photos of Mio's health card or baby book in Cowork and the AI will extract immunizations, birth measurements, and growth entries — no retyping needed.</div>
+      </div>
+    </div><div class="gap"></div>`;
+}
+
+// ── ONBOARD ACTIONS ──────────────────────────────────────────────────
+function nextOnboard() { onboardStep = Math.min(onboardStep+1, 4); renderView(); }
+function prevOnboard() { onboardStep = Math.max(onboardStep-1, 0); renderView(); }
+
+async function skipOnboard() {
+  if (!data.settings) data.settings = {};
+  data.settings.onboardingDone = true;
+  await save(); renderView(); updateHdr();
+}
+
+function addObWord() {
+  const word = (document.getElementById('obWord')?.value||'').trim();
+  if (!word) return;
+  const meaning  = (document.getElementById('obMeaning')?.value||'').trim();
+  const language = document.getElementById('obLang')?.value || 'Filipino';
+  if (!data.words) data.words = [];
+  if (data.words.some(w => w.word.toLowerCase()===word.toLowerCase())) { toast('Already in the list.'); return; }
+  data.words.push({ id:uid(), word, meaning, language, firstHeard:today() });
+  renderView();
+}
+
+function removeWord(wordId) {
+  data.words = (data.words||[]).filter(w => w.id !== wordId);
+  renderView();
+}
+
+function setObMilestone(item, status) {
+  if (!data.milestones) data.milestones = [];
+  const existing = data.milestones.find(m => m.item === item);
+  if (existing) {
+    existing.status = status; existing.date = today();
+  } else {
+    const ci = CDC_ITEMS.find(x => x.item === item);
+    data.milestones.push({ id:uid(), date:today(), ageMonths:ageMonths(data.child?.dob||MIO_DOB), domain:ci?.domain||'other', item, status, note:'' });
+  }
+  renderView();
+}
+
+async function saveObMeasurements() {
+  const dateVal = document.getElementById('obDate')?.value || today();
+  const wt = parseFloat(document.getElementById('obWt')?.value);
+  const ht = parseFloat(document.getElementById('obHt')?.value);
+  const hd = parseFloat(document.getElementById('obHd')?.value);
+  if (wt || ht || hd) {
+    if (!data.growth) data.growth = [];
+    data.growth = data.growth.filter(g => g.note !== 'Onboarding entry');
+    data.growth.push({ id:uid(), date:dateVal, ageMonths:ageMonths(data.child?.dob||MIO_DOB), weightKg:wt||null, heightCm:ht||null, headCm:hd||null, note:'Onboarding entry' });
+  }
+  nextOnboard();
+}
+
+async function finishOnboard() {
+  onboardStep = 4;
+  await save(); renderView();
+}
+
+async function completeOnboard() {
+  if (!data.settings) data.settings = {};
+  data.settings.onboardingDone = true;
+  await save();
+  onboardStep = 0;
+  renderView(); updateHdr();
+  toast('✅ Setup complete!');
+}
+
+function importOnboardData() {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = '.json';
+  inp.onchange = async e => {
+    const file = e.target.files[0]; if (!file) return;
+    try {
+      const imp = JSON.parse(await file.text());
+      if (!imp.child && !imp.words && !imp.growth) throw new Error('invalid');
+      data = { ...clone(DEF), ...imp };
+      data.settings = { ...clone(DEF.settings), ...(imp.settings||{}), onboardingDone:true };
+      await save(); toast('✅ Imported!'); onboardStep=0; renderView(); updateHdr();
+    } catch(err) { toast('Not a valid Mio Tracker file.'); }
+  };
+  inp.click();
 }
 
 // ═══ MILESTONES VIEW ══════════════════════════════════════════════════════

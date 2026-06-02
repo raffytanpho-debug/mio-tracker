@@ -23,15 +23,6 @@
     *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
     html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:15px;overscroll-behavior:none}
 
-    /* GATE */
-    #GATE{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px 24px;background:var(--bg)}
-    #gateInner{width:100%;max-width:340px}
-    .gate-inp{width:100%;background:var(--surface);border:1.5px solid var(--border);border-radius:12px;padding:14px;color:var(--text);font-size:18px;text-align:center;outline:none;margin-bottom:10px;font-family:inherit;transition:border-color .2s}
-    .gate-inp:focus{border-color:var(--accent)}
-    .gate-inp.unlock{font-size:24px;letter-spacing:6px}
-    .gate-btn{width:100%;background:var(--accent);color:#fff;border:none;border-radius:12px;padding:14px;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;transition:opacity .15s}
-    .gate-btn:active{opacity:.8}
-
     /* APP */
     #app{max-width:430px;margin:0 auto;height:100vh;display:flex;flex-direction:column;overflow:hidden}
     #header{background:linear-gradient(160deg,#112218 0%,#0d1117 60%);padding:14px 16px 16px;flex-shrink:0;border-bottom:1px solid var(--border)}
@@ -114,13 +105,8 @@
 </head>
 <body>
 
-<!-- ═══ PASSCODE GATE ═══════════════════════════════════════════════ -->
-<div id="GATE">
-  <div id="gateInner"></div>
-</div>
-
-<!-- ═══ MAIN APP (shown after unlock) ═══════════════════════════════ -->
-<div id="app" style="display:none">
+<!-- ═══ MAIN APP ══════════════════════════════════════════════════════ -->
+<div id="app">
   <div id="header"></div>
   <div id="content"></div>
   <nav id="nav">
@@ -245,71 +231,10 @@ async function loadData() {
   }
 }
 
-// ═══ PASSCODE ══════════════════════════════════════════════════════════════
-async function hashPasscode(pc) {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('mio-tracker:' + pc));
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-async function showGate() {
-  const existing = await dbGet('passcodeHash');
-  const gate = document.getElementById('gateInner');
-  const logo = `<div style="text-align:center;margin-bottom:28px"><div style="font-size:56px;margin-bottom:12px">👶</div><div style="font-size:22px;font-weight:800;color:var(--text)">Mio Tracker</div>`;
-
-  if (!existing) {
-    // First run: set a passcode
-    gate.innerHTML = `
-      ${logo}<div style="font-size:14px;color:var(--muted);margin-top:5px">Set a passcode to protect Mio's data</div></div>
-      <input id="pc1" class="gate-inp" type="password" inputmode="numeric" maxlength="12" placeholder="Choose a passcode (min 4)">
-      <input id="pc2" class="gate-inp" type="password" inputmode="numeric" maxlength="12" placeholder="Confirm passcode">
-      <button class="gate-btn" onclick="setupPasscode()">Set Passcode &amp; Open</button>
-      <div id="gateErr" style="color:var(--red);font-size:13px;text-align:center;margin-top:10px;min-height:18px"></div>
-    `;
-    document.getElementById('pc1').focus();
-    document.getElementById('pc2').addEventListener('keydown', e => { if (e.key === 'Enter') setupPasscode(); });
-  } else {
-    // Returning: unlock
-    gate.innerHTML = `
-      ${logo}<div style="font-size:14px;color:var(--muted);margin-top:5px">Enter passcode to continue</div></div>
-      <input id="pcInp" class="gate-inp unlock" type="password" inputmode="numeric" maxlength="12" placeholder="Passcode" autocomplete="current-password">
-      <button class="gate-btn" onclick="unlock()">Unlock</button>
-      <div id="gateErr" style="color:var(--red);font-size:13px;text-align:center;margin-top:10px;min-height:18px"></div>
-    `;
-    const inp = document.getElementById('pcInp');
-    inp.focus();
-    inp.addEventListener('keydown', e => { if (e.key === 'Enter') unlock(); });
-  }
-}
-
-async function setupPasscode() {
-  const pc1 = document.getElementById('pc1').value;
-  const pc2 = document.getElementById('pc2').value;
-  const err = document.getElementById('gateErr');
-  if (pc1.length < 4) { err.textContent = 'Passcode must be at least 4 characters.'; return; }
-  if (pc1 !== pc2) { err.textContent = "Passcodes don't match."; return; }
-  const hash = await hashPasscode(pc1);
-  await dbSet('passcodeHash', hash);
-  launchApp();
-}
-
-async function unlock() {
-  const inp = document.getElementById('pcInp');
-  const hash = await hashPasscode(inp.value);
-  const stored = await dbGet('passcodeHash');
-  if (hash !== stored) {
-    document.getElementById('gateErr').textContent = 'Incorrect passcode.';
-    inp.value = '';
-    inp.focus();
-    return;
-  }
-  launchApp();
-}
-
+// ═══ LAUNCH ════════════════════════════════════════════════════════════════
 async function launchApp() {
   await loadData();
   await tryRestoreAuth();
-  document.getElementById('GATE').style.display = 'none';
-  document.getElementById('app').style.display = 'flex';
   sv('home');
 }
 
@@ -658,15 +583,6 @@ function buildSettings() {
       <div><div class="set-lbl">Languages tracked</div><div class="set-sub">${langs}</div></div>
     </div>
 
-    <div class="set-sec">Security</div>
-    <div class="set-row">
-      <div>
-        <div class="set-lbl">Passcode</div>
-        <div class="set-sub">Client-side hash — protects casual access on open</div>
-      </div>
-      <button class="set-btn" onclick="openChangePasscodeModal()">Change</button>
-    </div>
-
     <div class="set-sec">Sync</div>
     <div class="set-row">
       <div>
@@ -712,54 +628,13 @@ async function saveProxyUrl() {
   toast('Proxy URL saved.');
 }
 
-// ═══ CHANGE PASSCODE MODAL ════════════════════════════════════════════════
-function openChangePasscodeModal() {
-  openModal(`
-    <div class="mdh"></div>
-    <div class="mdt">Change Passcode</div>
-    <div class="mf">
-      <div class="ml">Current Passcode</div>
-      <input class="mi" id="pcCur" type="password" inputmode="numeric" maxlength="12" placeholder="Current passcode">
-    </div>
-    <div class="mf">
-      <div class="ml">New Passcode</div>
-      <input class="mi" id="pcNew1" type="password" inputmode="numeric" maxlength="12" placeholder="New passcode (min 4 characters)">
-    </div>
-    <div class="mf">
-      <div class="ml">Confirm New</div>
-      <input class="mi" id="pcNew2" type="password" inputmode="numeric" maxlength="12" placeholder="Confirm new passcode">
-    </div>
-    <div id="pcErr" style="color:var(--red);font-size:13px;min-height:18px;margin-bottom:4px"></div>
-    <div class="ma">
-      <button class="mb cancel" onclick="closeModal()">Cancel</button>
-      <button class="mb primary" onclick="changePasscode()">Save</button>
-    </div>
-  `);
-}
-
-async function changePasscode() {
-  const cur  = document.getElementById('pcCur').value;
-  const n1   = document.getElementById('pcNew1').value;
-  const n2   = document.getElementById('pcNew2').value;
-  const err  = document.getElementById('pcErr');
-  const stored = await dbGet('passcodeHash');
-  const curHash = await hashPasscode(cur);
-  if (curHash !== stored) { err.textContent = 'Current passcode is incorrect.'; return; }
-  if (n1.length < 4)       { err.textContent = 'New passcode must be at least 4 characters.'; return; }
-  if (n1 !== n2)            { err.textContent = "Passcodes don't match."; return; }
-  const newHash = await hashPasscode(n1);
-  await dbSet('passcodeHash', newHash);
-  closeModal();
-  toast('✅ Passcode updated!');
-}
-
 // ═══ SERVICE WORKER + BOOT ════════════════════════════════════════════════
 (async function init() {
   await openDB();
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(e => console.warn('SW registration failed:', e));
   }
-  await showGate();
+  await launchApp();
 })();
 </script>
 </body>

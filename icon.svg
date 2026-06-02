@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+  <!-- Background -->
+  <rect width="192" height="192" rx="40" fill="#161b22"/>
+  <!-- Leaf / growth symbol in teal-green -->
+  <ellipse cx="96" cy="80" rx="32" ry="42" fill="#3fb950" opacity=".9" transform="rotate(-20 96 80)"/>
+  <ellipse cx="96" cy="80" rx="32" ry="42" fill="#56d364" opacity=".6" transform="rotate(20 96 80)"/>
+  <!-- Stem -->
+  <line x1="96" y1="108" x2="96" y2="148" stroke="#3fb950" stroke-width="6" stroke-linecap="round"/>
+  <!-- Letter M (subtle, centered) -->
+  <text x="96" y="170" font-size="22" text-anchor="middle" fill="#3fb950" font-family="-apple-system,sans-serif" font-weight="800" opacity=".7">MIO</text>
+</svg>

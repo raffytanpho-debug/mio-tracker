@@ -1,0 +1,18 @@
+{
+  "name": "Mio Tracker",
+  "short_name": "Mio",
+  "description": "Private baby development tracker for Mio",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0d1117",
+  "theme_color": "#161b22",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

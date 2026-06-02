@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Mio</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#161b22">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Mio">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <style>
+    :root {
+      --bg:#0d1117; --surface:#161b22; --surface2:#21262d; --border:#30363d;
+      --text:#f0f6fc; --muted:#7d8590;
+      --accent:#3fb950; --accent-l:#56d364;
+      --green:#3fb950; --red:#f85149; --yellow:#e3b341; --blue:#58a6ff; --purple:#bc8cff;
+      --nav-h:60px; --r:14px; --rs:10px;
+    }
+    *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+    html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:15px;overscroll-behavior:none}
+
+    /* GATE */
+    #GATE{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px 24px;background:var(--bg)}
+    #gateInner{width:100%;max-width:340px}
+    .gate-inp{width:100%;background:var(--surface);border:1.5px solid var(--border);border-radius:12px;padding:14px;color:var(--text);font-size:18px;text-align:center;outline:none;margin-bottom:10px;font-family:inherit;transition:border-color .2s}
+    .gate-inp:focus{border-color:var(--accent)}
+    .gate-inp.unlock{font-size:24px;letter-spacing:6px}
+    .gate-btn{width:100%;background:var(--accent);color:#fff;border:none;border-radius:12px;padding:14px;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;transition:opacity .15s}
+    .gate-btn:active{opacity:.8}
+
+    /* APP */
+    #app{max-width:430px;margin:0 auto;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+    #header{background:linear-gradient(160deg,#112218 0%,#0d1117 60%);padding:14px 16px 16px;flex-shrink:0;border-bottom:1px solid var(--border)}
+    #content{flex:1;overflow-y:auto;padding-bottom:var(--nav-h)}
+    #nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;height:var(--nav-h);background:var(--surface);border-top:1px solid var(--border);display:flex;z-index:100}
+
+    /* HEADER */
+    .drive-banner{display:flex;align-items:center;justify-content:space-between;gap:8px;background:rgba(248,81,73,.12);border:1px solid rgba(248,81,73,.3);border-radius:8px;padding:7px 10px;margin-bottom:12px;font-size:12px;color:#ffa198}
+    .drive-banner.ok{background:rgba(63,185,80,.1);border-color:rgba(63,185,80,.3);color:#7bc9a0}
+    .drive-banner button{background:rgba(248,81,73,.25);border:none;border-radius:6px;color:#ffa198;font-size:11px;font-weight:700;padding:3px 8px;cursor:pointer}
+    .hdr-lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1.2px;font-weight:700}
+    .hdr-name{font-size:28px;font-weight:800;letter-spacing:-.5px;color:var(--text);margin:2px 0 3px}
+    .hdr-age{font-size:13px;color:var(--accent-l);font-weight:600}
+
+    /* NAV */
+    .nb{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;color:var(--muted);border:none;background:none;font-size:9px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;transition:color .2s;padding:0}
+    .nb.active{color:var(--accent-l)}
+    .ni{font-size:18px;line-height:1}
+
+    /* CARDS */
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:15px;margin:0 13px 10px}
+    .card-title{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:11px;font-weight:700}
+
+    /* STATS PAIR */
+    .scard{background:var(--surface);border:1px solid var(--border);border-radius:var(--rs);padding:12px}
+    .s-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);font-weight:700}
+    .s-val{font-size:21px;font-weight:800;margin:3px 0 2px;letter-spacing:-.5px}
+    .s-sub{font-size:11px;color:var(--muted)}
+
+    /* SETTINGS */
+    .set-sec{padding:13px 13px 5px;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);font-weight:700}
+    .set-row{background:var(--surface);border:1px solid var(--border);border-radius:var(--rs);padding:12px 13px;margin:0 13px 7px;display:flex;align-items:center;justify-content:space-between;gap:11px}
+    .set-lbl{font-size:14px;font-weight:600}
+    .set-sub{font-size:11px;color:var(--muted);margin-top:2px}
+    .set-inp{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:7px 9px;color:var(--text);font-size:13px;outline:none;width:100%;font-family:inherit;transition:border-color .2s}
+    .set-inp:focus{border-color:var(--accent-l)}
+    .set-btn{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:7px 12px;color:var(--text);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;transition:all .15s;flex-shrink:0}
+    .set-btn:hover{border-color:var(--accent-l);color:var(--accent-l)}
+    .set-btn.ok{border-color:var(--green);color:var(--green)}
+    .set-btn.danger{border-color:var(--red);color:var(--red)}
+
+    /* MODAL */
+    .mo{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:200;display:flex;align-items:flex-end;justify-content:center;backdrop-filter:blur(3px)}
+    .mo.hidden{display:none}
+    .md{background:var(--surface);border-radius:22px 22px 0 0;padding:0 17px 30px;width:100%;max-width:430px;border-top:1px solid var(--border);max-height:90vh;overflow-y:auto}
+    .mdh{width:36px;height:4px;background:var(--border);border-radius:2px;margin:10px auto 17px}
+    .mdt{font-size:17px;font-weight:800;margin-bottom:17px}
+    .mf{margin-bottom:12px}
+    .ml{font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
+    .mi{width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--rs);padding:10px 12px;color:var(--text);font-size:15px;outline:none;font-family:inherit;transition:border-color .15s}
+    .mi:focus{border-color:var(--accent-l)}
+    .ma{display:flex;gap:8px;margin-top:17px}
+    .mb{flex:1;padding:12px;border-radius:var(--rs);font-size:14px;font-weight:700;cursor:pointer;border:none;transition:opacity .15s;font-family:inherit}
+    .mb:active{opacity:.8}
+    .mb.primary{background:var(--accent);color:#fff}
+    .mb.danger{background:var(--red);color:#fff}
+    .mb.cancel{background:var(--surface2);color:var(--text)}
+
+    /* MISC */
+    .empty{text-align:center;padding:44px 18px;color:var(--muted)}
+    .empty-ico{font-size:44px;margin-bottom:10px}
+    .empty-txt{font-size:16px;font-weight:700;color:var(--text)}
+    .empty-sub{font-size:13px;margin-top:5px}
+    .gap{height:16px}
+    .spin{display:inline-block;animation:spin 1s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .toast{position:fixed;bottom:calc(var(--nav-h) + 12px);left:50%;transform:translateX(-50%) translateY(8px);background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:9px 17px;border-radius:20px;font-size:13px;z-index:300;opacity:0;transition:all .25s;pointer-events:none;white-space:nowrap;box-shadow:0 4px 20px rgba(0,0,0,.5)}
+    .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+    ::-webkit-scrollbar{width:3px}
+    ::-webkit-scrollbar-track{background:transparent}
+    ::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+    /* PROGRESS LIST */
+    .phase-row{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:13px;color:var(--muted);border-bottom:1px solid var(--border)}
+    .phase-row:last-child{border-bottom:none}
+    .phase-row.done{color:var(--text)}
+    .phase-dot{width:8px;height:8px;border-radius:50%;background:var(--border);flex-shrink:0}
+    .phase-dot.done{background:var(--accent)}
+  </style>
+</head>
+<body>
+
+<!-- ═══ PASSCODE GATE ═══════════════════════════════════════════════ -->
+<div id="GATE">
+  <div id="gateInner"></div>
+</div>
+
+<!-- ═══ MAIN APP (shown after unlock) ═══════════════════════════════ -->
+<div id="app" style="display:none">
+  <div id="header"></div>
+  <div id="content"></div>
+  <nav id="nav">
+    <button class="nb active" data-view="home"       onclick="sv('home')">      <span class="ni">🏠</span><span>Home</span></button>
+    <button class="nb"        data-view="milestones" onclick="sv('milestones')"><span class="ni">📋</span><span>Goals</span></button>
+    <button class="nb"        data-view="growth"     onclick="sv('growth')">    <span class="ni">📈</span><span>Growth</span></button>
+    <button class="nb"        data-view="trends"     onclick="sv('trends')">    <span class="ni">📅</span><span>Trends</span></button>
+    <button class="nb"        data-view="advisor"    onclick="sv('advisor')">   <span class="ni">💬</span><span>Advisor</span></button>
+    <button class="nb"        data-view="settings"   onclick="sv('settings')">  <span class="ni">⚙️</span><span>Settings</span></button>
+  </nav>
+</div>
+
+<div class="mo hidden" id="MO" onclick="handleOC(event)"><div class="md" id="MD"></div></div>
+<div class="toast" id="T"></div>
+
+<script>
+// ═══ CONFIG ═══════════════════════════════════════════════════════════════
+const MIO_DOB = '2024-10-15';
+// Reusing the same Google Cloud project as Financial Tracker.
+// ⚠️ Before going live: add the Mio Tracker GitHub Pages URL to Authorized JavaScript
+// origins at console.cloud.google.com → APIs & Services → Credentials → OAuth client.
+const GDRIVE_CLIENT_ID = '428293773028-hdmpetjd007bahi6kmm4ku61j8gss3mf.apps.googleusercontent.com';
+const GDRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+const APP_VERSION = '1.0.0-phase1';
+
+// ═══ DATA MODEL ════════════════════════════════════════════════════════════
+const DEF = {
+  version: 1,
+  child: { name: 'Mio', dob: MIO_DOB, sex: 'M', languages: ['Filipino', 'English'], pediatrician: {} },
+  growth: [],        // { id, date, ageMonths, weightKg, heightCm, headCm, note }
+  milestones: [],    // { id, date, ageMonths, domain, item, status, note }
+  wellbeing: [],     // { id, date, sleepBand, appetite, mood, activeBand, screenBand, readTogether, note }
+  words: [],         // { id, word, meaning, language, firstHeard }
+  safetyStatus: {},  // { itemKey: lastConfirmedDate }
+  checkinLog: [],    // { date, answeredKeys[], skippedKeys[] }
+  immunizations: [], // { id, vaccine, date, source, note }
+  activities: [],    // { id, weekOf, day, activity, domain, targetWords[], done }
+  settings: {
+    driveFileId: null,
+    theme: 'dark',
+    checkinDoneDate: null,
+    proxyUrl: 'https://claude-proxy.raffy-tanpho.workers.dev'
+  }
+};
+
+// ═══ STATE ═════════════════════════════════════════════════════════════════
+let data = clone(DEF);
+let view = 'home';
+let gdriveToken = null;
+let gdriveFileId = null;
+let gdriveRefreshTimer = null;
+let _db = null;
+
+// ═══ HELPERS ═══════════════════════════════════════════════════════════════
+function clone(o) { return JSON.parse(JSON.stringify(o)); }
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+function today() { return new Date().toISOString().slice(0, 10); }
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function ageMonths(dob) {
+  const birth = new Date((dob || MIO_DOB) + 'T00:00:00');
+  const now = new Date();
+  let months = (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth());
+  if (now.getDate() < birth.getDate()) months--;
+  return Math.max(0, months);
+}
+
+function ageStr(dob) {
+  const m = ageMonths(dob);
+  const y = Math.floor(m / 12);
+  const mo = m % 12;
+  if (y === 0) return `${m} months old`;
+  if (mo === 0) return `${y} year${y !== 1 ? 's' : ''} old`;
+  return `${y}y ${mo}mo old`;
+}
+
+// ═══ INDEXEDDB ════════════════════════════════════════════════════════════
+async function openDB() {
+  if (_db) return _db;
+  return new Promise((res, rej) => {
+    const r = indexedDB.open('mioDB', 1);
+    r.onupgradeneeded = e => { try { e.target.result.createObjectStore('kv'); } catch (x) {} };
+    r.onsuccess = e => { _db = e.target.result; res(_db); };
+    r.onerror = rej;
+  });
+}
+async function dbGet(k) {
+  await openDB();
+  return new Promise((res, rej) => {
+    const r = _db.transaction('kv', 'readonly').objectStore('kv').get(k);
+    r.onsuccess = e => res(e.target.result);
+    r.onerror = rej;
+  });
+}
+async function dbSet(k, v) {
+  await openDB();
+  return new Promise((res, rej) => {
+    const tx = _db.transaction('kv', 'readwrite');
+    tx.objectStore('kv').put(v, k);
+    tx.oncomplete = res;
+    tx.onerror = rej;
+  });
+}
+
+// ═══ SAVE / LOAD ══════════════════════════════════════════════════════════
+// Phase 1: local-only. Phase 6 will add merge-before-save Drive PATCH here.
+async function save() {
+  await dbSet('data', clone(data));
+}
+
+async function loadData() {
+  const stored = await dbGet('data');
+  if (stored) {
+    data = { ...clone(DEF), ...stored };
+    // Ensure all array/object fields exist (migration safety)
+    ['growth','milestones','wellbeing','words','checkinLog','immunizations','activities'].forEach(k => {
+      if (!Array.isArray(data[k])) data[k] = [];
+    });
+    if (!data.safetyStatus || typeof data.safetyStatus !== 'object') data.safetyStatus = {};
+    if (!data.child || typeof data.child !== 'object') data.child = clone(DEF.child);
+    if (!data.settings || typeof data.settings !== 'object') data.settings = clone(DEF.settings);
+  }
+}
+
+// ═══ PASSCODE ══════════════════════════════════════════════════════════════
+async function hashPasscode(pc) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('mio-tracker:' + pc));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function showGate() {
+  const existing = await dbGet('passcodeHash');
+  const gate = document.getElementById('gateInner');
+  const logo = `<div style="text-align:center;margin-bottom:28px"><div style="font-size:56px;margin-bottom:12px">👶</div><div style="font-size:22px;font-weight:800;color:var(--text)">Mio Tracker</div>`;
+
+  if (!existing) {
+    // First run: set a passcode
+    gate.innerHTML = `
+      ${logo}<div style="font-size:14px;color:var(--muted);margin-top:5px">Set a passcode to protect Mio's data</div></div>
+      <input id="pc1" class="gate-inp" type="password" inputmode="numeric" maxlength="12" placeholder="Choose a passcode (min 4)">
+      <input id="pc2" class="gate-inp" type="password" inputmode="numeric" maxlength="12" placeholder="Confirm passcode">
+      <button class="gate-btn" onclick="setupPasscode()">Set Passcode &amp; Open</button>
+      <div id="gateErr" style="color:var(--red);font-size:13px;text-align:center;margin-top:10px;min-height:18px"></div>
+    `;
+    document.getElementById('pc1').focus();
+    document.getElementById('pc2').addEventListener('keydown', e => { if (e.key === 'Enter') setupPasscode(); });
+  } else {
+    // Returning: unlock
+    gate.innerHTML = `
+      ${logo}<div style="font-size:14px;color:var(--muted);margin-top:5px">Enter passcode to continue</div></div>
+      <input id="pcInp" class="gate-inp unlock" type="password" inputmode="numeric" maxlength="12" placeholder="Passcode" autocomplete="current-password">
+      <button class="gate-btn" onclick="unlock()">Unlock</button>
+      <div id="gateErr" style="color:var(--red);font-size:13px;text-align:center;margin-top:10px;min-height:18px"></div>
+    `;
+    const inp = document.getElementById('pcInp');
+    inp.focus();
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') unlock(); });
+  }
+}
+
+async function setupPasscode() {
+  const pc1 = document.getElementById('pc1').value;
+  const pc2 = document.getElementById('pc2').value;
+  const err = document.getElementById('gateErr');
+  if (pc1.length < 4) { err.textContent = 'Passcode must be at least 4 characters.'; return; }
+  if (pc1 !== pc2) { err.textContent = "Passcodes don't match."; return; }
+  const hash = await hashPasscode(pc1);
+  await dbSet('passcodeHash', hash);
+  launchApp();
+}
+
+async function unlock() {
+  const inp = document.getElementById('pcInp');
+  const hash = await hashPasscode(inp.value);
+  const stored = await dbGet('passcodeHash');
+  if (hash !== stored) {
+    document.getElementById('gateErr').textContent = 'Incorrect passcode.';
+    inp.value = '';
+    inp.focus();
+    return;
+  }
+  launchApp();
+}
+
+async function launchApp() {
+  await loadData();
+  await tryRestoreAuth();
+  document.getElementById('GATE').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  sv('home');
+}
+
+// ═══ DRIVE AUTH (connect only — sync in Phase 6) ═══════════════════════
+function scheduleTokenRefresh(expiresInMs) {
+  if (gdriveRefreshTimer) clearTimeout(gdriveRefreshTimer);
+  const refreshIn = Math.max(expiresInMs - 5 * 60 * 1000, 30000);
+  gdriveRefreshTimer = setTimeout(silentTokenRefresh, refreshIn);
+}
+
+function silentTokenRefresh() {
+  if (!window.google?.accounts?.oauth2) return;
+  const client = google.accounts.oauth2.initTokenClient({
+    client_id: GDRIVE_CLIENT_ID, scope: GDRIVE_SCOPE,
+    callback: async r => {
+      if (r.error || !r.access_token) return;
+      gdriveToken = r.access_token;
+      await dbSet('gdriveToken', r.access_token);
+      const expiry = Date.now() + ((r.expires_in || 3599) * 1000);
+      await dbSet('gdriveExpiry', expiry);
+      scheduleTokenRefresh((r.expires_in || 3599) * 1000);
+    }
+  });
+  client.requestAccessToken({ prompt: '' });
+}
+
+async function connectDrive() {
+  if (!window.google?.accounts?.oauth2) { toast('Google sign-in not loaded yet — try refreshing.'); return; }
+  const client = google.accounts.oauth2.initTokenClient({
+    client_id: GDRIVE_CLIENT_ID, scope: GDRIVE_SCOPE,
+    callback: async r => {
+      if (r.error) { toast('Could not connect to Google Drive.'); return; }
+      gdriveToken = r.access_token;
+      await dbSet('gdriveToken', r.access_token);
+      const expiry = Date.now() + ((r.expires_in || 3599) * 1000);
+      await dbSet('gdriveExpiry', expiry);
+      scheduleTokenRefresh((r.expires_in || 3599) * 1000);
+      // Phase 6 will add findOrCreateDriveFile() and loadFromDrive() here.
+      toast('✅ Google account connected! Drive sync activates in Phase 6.');
+      updateHdr();
+      if (view === 'settings') renderView();
+    }
+  });
+  client.requestAccessToken({ prompt: '' });
+}
+
+async function disconnectDrive() {
+  gdriveToken = null;
+  gdriveFileId = null;
+  if (gdriveRefreshTimer) clearTimeout(gdriveRefreshTimer);
+  await dbSet('gdriveToken', null);
+  await dbSet('gdriveExpiry', null);
+  await dbSet('gdriveFileId', null);
+  toast('Disconnected from Google Drive.');
+  updateHdr();
+  if (view === 'settings') renderView();
+}
+
+async function tryRestoreAuth() {
+  try {
+    const token = await dbGet('gdriveToken');
+    const expiry = await dbGet('gdriveExpiry');
+    if (!token || !expiry) return;
+    if (Date.now() > expiry) { await dbSet('gdriveToken', null); return; }
+    gdriveToken = token;
+    gdriveFileId = await dbGet('gdriveFileId') || null;
+    scheduleTokenRefresh(expiry - Date.now());
+  } catch (e) {}
+}
+
+// ═══ EXPORT / IMPORT ══════════════════════════════════════════════════════
+function exportData() {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `mio-backup-${today()}.json`;
+  a.click();
+  toast('Backup exported!');
+}
+
+function importData() {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = '.json';
+  inp.onchange = async e => {
+    const file = e.target.files[0]; if (!file) return;
+    try {
+      const imp = JSON.parse(await file.text());
+      // Light validation: must look like Mio Tracker data
+      if (!imp.child && !imp.wellbeing && !imp.words) throw new Error('invalid');
+      data = { ...clone(DEF), ...imp };
+      await save();
+      toast('✅ Data imported!');
+      renderView(); updateHdr();
+    } catch (err) {
+      toast('Not a valid Mio Tracker backup file.');
+    }
+  };
+  inp.click();
+}
+
+// ═══ TOAST ════════════════════════════════════════════════════════════════
+let _toastTimer;
+function toast(msg) {
+  const t = document.getElementById('T');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+// ═══ MODAL ════════════════════════════════════════════════════════════════
+function openModal(html, onClose) {
+  document.getElementById('MD').innerHTML = html;
+  document.getElementById('MO').classList.remove('hidden');
+  document.getElementById('MO')._onClose = onClose || null;
+}
+function closeModal() {
+  const mo = document.getElementById('MO');
+  mo.classList.add('hidden');
+  if (mo._onClose) { mo._onClose(); mo._onClose = null; }
+}
+function handleOC(e) { if (e.target.id === 'MO') closeModal(); }
+
+// ═══ VIEW SYSTEM ══════════════════════════════════════════════════════════
+function sv(v) {
+  view = v;
+  document.querySelectorAll('.nb').forEach(b => b.classList.toggle('active', b.dataset.view === v));
+  renderView();
+  updateHdr();
+}
+
+function renderView() {
+  const c = document.getElementById('content');
+  if (view === 'home')       c.innerHTML = buildHome();
+  else if (view === 'milestones') c.innerHTML = buildMilestones();
+  else if (view === 'growth')    c.innerHTML = buildGrowth();
+  else if (view === 'trends')    c.innerHTML = buildTrends();
+  else if (view === 'advisor')   c.innerHTML = buildAdvisor();
+  else                           c.innerHTML = buildSettings();
+}
+
+// ═══ HEADER ═══════════════════════════════════════════════════════════════
+function updateHdr() {
+  const dob = data.child?.dob || MIO_DOB;
+  const name = data.child?.name || 'Mio';
+  const age = ageStr(dob);
+  const mo = ageMonths(dob);
+
+  const driveBanner = !gdriveToken
+    ? `<div class="drive-banner">⚠️ Drive sync not connected — data saved locally only <button onclick="connectDrive()">Connect</button></div>`
+    : `<div class="drive-banner ok">☁️ Google connected — Drive sync activates in Phase 6</div>`;
+
+  document.getElementById('header').innerHTML = `
+    ${driveBanner}
+    <div style="display:flex;align-items:flex-end;justify-content:space-between">
+      <div>
+        <div class="hdr-lbl">Tracking</div>
+        <div class="hdr-name">${esc(name)}</div>
+        <div class="hdr-age">${age} · ${mo} months · DOB ${dob}</div>
+      </div>
+      <div style="text-align:right;padding-bottom:2px">
+        <div class="hdr-lbl">Today</div>
+        <div style="font-size:13px;color:var(--muted);font-weight:600;margin-top:2px">
+          ${new Date().toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'})}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ═══ HOME VIEW ════════════════════════════════════════════════════════════
+function buildHome() {
+  const dob = data.child?.dob || MIO_DOB;
+  const mo = ageMonths(dob);
+  const wordCount = (data.words || []).length;
+  const checkinDone = data.settings?.checkinDoneDate === today();
+  const lastGrowth = (data.growth || []).slice().sort((a,b) => b.date.localeCompare(a.date))[0];
+
+  const phases = [
+    { done: true,  label: 'Phase 1: Scaffold (you\'re here!)' },
+    { done: false, label: 'Phase 2: Onboarding + baby book data seed' },
+    { done: false, label: 'Phase 3: Daily check-in engine' },
+    { done: false, label: 'Phase 4: Milestones + Trends views' },
+    { done: false, label: 'Phase 5: Growth + WHO percentile curves' },
+    { done: false, label: 'Phase 6: Drive sync — two-device sharing' },
+    { done: false, label: 'Phase 7: AI Advisor (KB-grounded chat)' },
+    { done: false, label: 'Phase 8: Polish + wife onboarding' },
+  ];
+
+  return `
+    <div style="padding:12px 13px 0">
+
+      <div class="card" style="background:linear-gradient(135deg,#112a1a 0%,#0d1e12 100%);border-color:#2a5c38">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#7bc9a0;font-weight:700;margin-bottom:8px">Daily Check-In</div>
+        <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:8px">
+          ${checkinDone ? '✅ Done for today!' : 'Coming in Phase 3'}
+        </div>
+        <div style="font-size:13px;color:#5a9e77;line-height:1.5">
+          ${checkinDone
+            ? 'Both parents can add to today\'s entry — tap again to review.'
+            : '5–10 quick taps each day will build Mio\'s full developmental record here.'}
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 0 10px">
+        <div class="scard">
+          <div class="s-lbl">Words</div>
+          <div class="s-val" style="color:var(--accent-l)">${wordCount}</div>
+          <div class="s-sub">all languages</div>
+        </div>
+        <div class="scard">
+          <div class="s-lbl">Age</div>
+          <div class="s-val" style="font-size:19px;color:var(--text)">${mo}<span style="font-size:11px;font-weight:400;color:var(--muted)">mo</span></div>
+          <div class="s-sub">born ${dob}</div>
+        </div>
+      </div>
+
+      ${lastGrowth ? `
+      <div class="card" style="margin:0 0 10px">
+        <div class="card-title">Last Measurement</div>
+        <div style="display:flex;gap:20px">
+          ${lastGrowth.weightKg ? `<div><div style="font-size:18px;font-weight:800">${lastGrowth.weightKg} kg</div><div style="font-size:11px;color:var(--muted)">weight</div></div>` : ''}
+          ${lastGrowth.heightCm ? `<div><div style="font-size:18px;font-weight:800">${lastGrowth.heightCm} cm</div><div style="font-size:11px;color:var(--muted)">height</div></div>` : ''}
+          ${lastGrowth.headCm ? `<div><div style="font-size:18px;font-weight:800">${lastGrowth.headCm} cm</div><div style="font-size:11px;color:var(--muted)">head</div></div>` : ''}
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px">${lastGrowth.date} · ${lastGrowth.ageMonths}mo</div>
+      </div>` : ''}
+
+      <div class="card" style="margin:0 0 10px;border-style:dashed">
+        <div class="card-title">🚧 Build Progress</div>
+        ${phases.map(p => `
+          <div class="phase-row ${p.done ? 'done' : ''}">
+            <div class="phase-dot ${p.done ? 'done' : ''}"></div>
+            <span>${p.label}</span>
+          </div>
+        `).join('')}
+      </div>
+
+    </div>
+    <div class="gap"></div>
+  `;
+}
+
+// ═══ MILESTONES VIEW ══════════════════════════════════════════════════════
+function buildMilestones() {
+  return `
+    <div class="empty" style="padding-top:60px">
+      <div class="empty-ico">📋</div>
+      <div class="empty-txt">Milestones</div>
+      <div class="empty-sub">Five-domain CDC checklists — Phase 4</div>
+    </div>
+    <div style="margin:0 13px">
+      <div class="card">
+        <div class="card-title">Coming in Phase 4</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.7">
+          Motor · Cognitive · Language · Social-Emotional · Adaptive<br>
+          Speech is pinned as the current focus. Milestone spotlights from the daily check-in will populate this view automatically.
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ═══ GROWTH VIEW ══════════════════════════════════════════════════════════
+function buildGrowth() {
+  return `
+    <div class="empty" style="padding-top:60px">
+      <div class="empty-ico">📈</div>
+      <div class="empty-txt">Growth</div>
+      <div class="empty-sub">WHO percentile curves — Phase 5</div>
+    </div>
+    <div style="margin:0 13px">
+      <div class="card">
+        <div class="card-title">Coming in Phase 5</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.7">
+          Weight · Height · Head circumference plotted against WHO boys' percentile bands.
+          Flags 2+ band crossings for the pediatrician — never interprets them.
+          Metric (kg, cm) throughout.
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ═══ TRENDS VIEW ══════════════════════════════════════════════════════════
+function buildTrends() {
+  return `
+    <div class="empty" style="padding-top:60px">
+      <div class="empty-ico">📅</div>
+      <div class="empty-txt">Trends</div>
+      <div class="empty-sub">Sleep, play, mood, words over time — Phase 4</div>
+    </div>
+    <div style="margin:0 13px">
+      <div class="card">
+        <div class="card-title">Coming in Phase 4</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.7">
+          Charts from daily check-in history: sleep bands, active play, screen time,
+          reading consistency, mood, and the growing word count across both languages.
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ═══ ADVISOR VIEW ═════════════════════════════════════════════════════════
+function buildAdvisor() {
+  return `
+    <div class="empty" style="padding-top:60px">
+      <div class="empty-ico">💬</div>
+      <div class="empty-txt">AI Advisor</div>
+      <div class="empty-sub">Knowledge-base grounded chat — Phase 7</div>
+    </div>
+    <div style="margin:0 13px">
+      <div class="card">
+        <div class="card-title">Coming in Phase 7</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.7">
+          Chat powered by the Mio Tracker knowledge base (CDC, AAP, WHO, ASHA).
+          Seeded with Mio's live data — age, recent check-ins, milestone status, growth.
+          Always routes clinical questions to the pediatrician. Never diagnoses.
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ═══ SETTINGS VIEW ════════════════════════════════════════════════════════
+function buildSettings() {
+  const dob   = esc(data.child?.dob || MIO_DOB);
+  const name  = esc(data.child?.name || 'Mio');
+  const langs = esc((data.child?.languages || []).join(', ') || 'Filipino, English');
+  const proxy = esc(data.settings?.proxyUrl || '');
+  const driveStatus = gdriveToken ? '✅ Connected (sync in Phase 6)' : '⚠️ Not connected';
+  const driveBtnLabel = gdriveToken ? 'Disconnect' : 'Connect Google Drive';
+  const driveBtnFn   = gdriveToken ? 'disconnectDrive()' : 'connectDrive()';
+  const driveBtnCls  = gdriveToken ? 'danger' : 'ok';
+
+  return `
+    <div class="set-sec">Child</div>
+    <div class="set-row">
+      <div><div class="set-lbl">Name</div><div class="set-sub">${name}</div></div>
+    </div>
+    <div class="set-row">
+      <div><div class="set-lbl">Date of Birth</div><div class="set-sub">${dob}</div></div>
+    </div>
+    <div class="set-row">
+      <div><div class="set-lbl">Languages tracked</div><div class="set-sub">${langs}</div></div>
+    </div>
+
+    <div class="set-sec">Security</div>
+    <div class="set-row">
+      <div>
+        <div class="set-lbl">Passcode</div>
+        <div class="set-sub">Client-side hash — protects casual access on open</div>
+      </div>
+      <button class="set-btn" onclick="openChangePasscodeModal()">Change</button>
+    </div>
+
+    <div class="set-sec">Sync</div>
+    <div class="set-row">
+      <div>
+        <div class="set-lbl">Google Drive</div>
+        <div class="set-sub">${driveStatus}</div>
+      </div>
+      <button class="set-btn ${driveBtnCls}" onclick="${driveBtnFn}">${driveBtnLabel}</button>
+    </div>
+    <div style="margin:0 13px 10px;padding:10px 13px;background:rgba(88,166,255,.07);border:1px solid rgba(88,166,255,.2);border-radius:var(--rs);font-size:12px;color:var(--blue);line-height:1.5">
+      ℹ️ Drive sync requires a <strong>shared Google account</strong> that both parents sign in with.
+      Both phones read and write the same data file. Full sync activates in Phase 6.
+    </div>
+
+    <div class="set-sec">AI Advisor</div>
+    <div class="set-row" style="flex-direction:column;align-items:stretch;gap:8px">
+      <div class="set-lbl">Claude Proxy URL</div>
+      <input class="set-inp" id="proxyInp" type="url" value="${proxy}" placeholder="https://your-worker.workers.dev" onblur="saveProxyUrl()">
+    </div>
+
+    <div class="set-sec">Data</div>
+    <div class="set-row">
+      <div><div class="set-lbl">Export Backup</div><div class="set-sub">Download all data as JSON</div></div>
+      <button class="set-btn" onclick="exportData()">Export</button>
+    </div>
+    <div class="set-row">
+      <div><div class="set-lbl">Import Backup</div><div class="set-sub">Restore from JSON file</div></div>
+      <button class="set-btn" onclick="importData()">Import</button>
+    </div>
+
+    <div class="set-sec">About</div>
+    <div class="set-row">
+      <div><div class="set-lbl">Mio Tracker</div><div class="set-sub">v${APP_VERSION} · Phase 1 — Scaffold</div></div>
+    </div>
+    <div class="gap"></div>
+  `;
+}
+
+async function saveProxyUrl() {
+  const val = (document.getElementById('proxyInp')?.value || '').trim();
+  if (!data.settings) data.settings = clone(DEF.settings);
+  data.settings.proxyUrl = val;
+  await save();
+  toast('Proxy URL saved.');
+}
+
+// ═══ CHANGE PASSCODE MODAL ════════════════════════════════════════════════
+function openChangePasscodeModal() {
+  openModal(`
+    <div class="mdh"></div>
+    <div class="mdt">Change Passcode</div>
+    <div class="mf">
+      <div class="ml">Current Passcode</div>
+      <input class="mi" id="pcCur" type="password" inputmode="numeric" maxlength="12" placeholder="Current passcode">
+    </div>
+    <div class="mf">
+      <div class="ml">New Passcode</div>
+      <input class="mi" id="pcNew1" type="password" inputmode="numeric" maxlength="12" placeholder="New passcode (min 4 characters)">
+    </div>
+    <div class="mf">
+      <div class="ml">Confirm New</div>
+      <input class="mi" id="pcNew2" type="password" inputmode="numeric" maxlength="12" placeholder="Confirm new passcode">
+    </div>
+    <div id="pcErr" style="color:var(--red);font-size:13px;min-height:18px;margin-bottom:4px"></div>
+    <div class="ma">
+      <button class="mb cancel" onclick="closeModal()">Cancel</button>
+      <button class="mb primary" onclick="changePasscode()">Save</button>
+    </div>
+  `);
+}
+
+async function changePasscode() {
+  const cur  = document.getElementById('pcCur').value;
+  const n1   = document.getElementById('pcNew1').value;
+  const n2   = document.getElementById('pcNew2').value;
+  const err  = document.getElementById('pcErr');
+  const stored = await dbGet('passcodeHash');
+  const curHash = await hashPasscode(cur);
+  if (curHash !== stored) { err.textContent = 'Current passcode is incorrect.'; return; }
+  if (n1.length < 4)       { err.textContent = 'New passcode must be at least 4 characters.'; return; }
+  if (n1 !== n2)            { err.textContent = "Passcodes don't match."; return; }
+  const newHash = await hashPasscode(n1);
+  await dbSet('passcodeHash', newHash);
+  closeModal();
+  toast('✅ Passcode updated!');
+}
+
+// ═══ SERVICE WORKER + BOOT ════════════════════════════════════════════════
+(async function init() {
+  await openDB();
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').catch(e => console.warn('SW registration failed:', e));
+  }
+  await showGate();
+})();
+</script>
+</body>
+</html>

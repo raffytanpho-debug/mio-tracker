@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Mio">
-  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="apple-touch-icon" href="apple-touch-icon-180.png">
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
     :root {
@@ -94,6 +94,7 @@
     ::-webkit-scrollbar{width:3px}
     ::-webkit-scrollbar-track{background:transparent}
     ::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+    @keyframes adot{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-5px)}}
 
     /* PROGRESS LIST */
     .phase-row{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:13px;color:var(--muted);border-bottom:1px solid var(--border)}
@@ -130,7 +131,8 @@ const MIO_DOB = '2024-10-15';
 // origins at console.cloud.google.com → APIs & Services → Credentials → OAuth client.
 const GDRIVE_CLIENT_ID = '428293773028-hdmpetjd007bahi6kmm4ku61j8gss3mf.apps.googleusercontent.com';
 const GDRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
-const APP_VERSION = '1.0.0-phase2';
+const APP_VERSION = '1.0.0';
+const DRIVE_FILE_NAME = 'mio-tracker-data.json';
 
 // CDC 18-month milestone checklist (all five domains)
 const CDC_ITEMS = [
@@ -148,6 +150,109 @@ const CDC_ITEMS = [
   { domain:'motor_fine',       item:'Stacks 2+ objects' },
   { domain:'adaptive',         item:'Feeds self with fingers or spoon' },
   { domain:'adaptive',         item:'Drinks from open cup' },
+];
+
+// Safety items — one shown per week, rotating
+const SAFETY_ITEMS = [
+  { key:'meds_locked',       q:'Medicines + cleaning products locked up high?' },
+  { key:'furniture_anchor',  q:'Furniture and TV anchored against tipping?' },
+  { key:'stairs_gated',      q:'Stairs gated, window cords out of reach?' },
+  { key:'small_objects',     q:'Small objects and button batteries off the floor?' },
+  { key:'carseat',           q:'Car seat properly installed and used?' },
+  { key:'emergency_nums',    q:'Pediatrician and poison control numbers saved?' },
+];
+
+// ─── WHO Boys Growth Standards (approximated from published tables, 2006) ──────
+// Columns per row: [P3, P10, P25, P50, P75, P90, P97]
+// ⚠ Reference only — not for clinical decisions. Source: WHO Child Growth Standards (2006).
+const WHO_WT_B = { // weight-for-age, kg, months 0–30
+   0:[2.5,2.9,3.2,3.5,3.9,4.2,4.6],  1:[3.4,3.8,4.2,4.5,4.9,5.3,5.7],
+   2:[4.3,4.7,5.1,5.6,6.0,6.5,6.9],  3:[5.0,5.5,6.0,6.4,6.9,7.4,7.9],
+   4:[5.6,6.1,6.6,7.0,7.6,8.1,8.7],  5:[6.0,6.5,7.1,7.5,8.1,8.7,9.3],
+   6:[6.4,6.9,7.5,7.9,8.5,9.1,9.7],  7:[6.7,7.2,7.8,8.3,8.9,9.5,10.2],
+   8:[6.9,7.5,8.1,8.6,9.2,9.9,10.5], 9:[7.1,7.7,8.3,8.9,9.5,10.2,10.9],
+  10:[7.4,7.9,8.6,9.2,9.8,10.5,11.2],11:[7.6,8.2,8.8,9.4,10.1,10.8,11.5],
+  12:[7.7,8.4,9.0,9.6,10.3,11.0,11.8],13:[7.9,8.6,9.2,9.9,10.6,11.3,12.1],
+  14:[8.1,8.7,9.4,10.1,10.8,11.6,12.4],15:[8.3,8.9,9.6,10.3,11.1,11.8,12.6],
+  16:[8.4,9.1,9.8,10.5,11.3,12.1,12.9],17:[8.6,9.3,10.0,10.7,11.5,12.3,13.1],
+  18:[8.8,9.5,10.2,10.9,11.7,12.6,13.4],19:[8.9,9.7,10.4,11.2,12.0,12.8,13.7],
+  20:[9.1,9.8,10.6,11.4,12.2,13.1,14.0],21:[9.2,10.0,10.8,11.6,12.5,13.3,14.2],
+  22:[9.4,10.2,11.0,11.8,12.7,13.6,14.5],23:[9.5,10.3,11.2,12.0,12.9,13.8,14.8],
+  24:[9.7,10.5,11.3,12.2,13.1,14.1,15.0],25:[9.8,10.7,11.5,12.4,13.4,14.3,15.3],
+  26:[10.0,10.9,11.7,12.7,13.6,14.6,15.6],27:[10.1,11.0,11.9,12.9,13.9,14.9,15.9],
+  28:[10.3,11.2,12.1,13.1,14.1,15.1,16.2],29:[10.4,11.4,12.3,13.3,14.3,15.4,16.4],
+  30:[10.6,11.5,12.5,13.6,14.6,15.6,16.7]
+};
+const WHO_LN_B = { // length/height-for-age, cm (recumbent 0–24mo, standing 24–30mo)
+   0:[46.3,47.5,48.7,50.0,51.3,52.5,53.8], 1:[51.1,52.3,53.5,54.7,56.0,57.2,58.4],
+   2:[54.7,55.9,57.2,58.4,59.7,60.9,62.2], 3:[57.6,58.9,60.1,61.4,62.7,63.9,65.2],
+   4:[60.0,61.3,62.6,63.9,65.2,66.4,67.7], 5:[62.0,63.3,64.6,65.9,67.3,68.5,69.8],
+   6:[63.6,65.0,66.3,67.6,69.0,70.3,71.6], 7:[65.2,66.6,67.9,69.2,70.6,71.9,73.2],
+   8:[66.6,68.0,69.4,70.6,72.0,73.4,74.7], 9:[67.8,69.4,70.8,72.0,73.3,74.7,76.1],
+  10:[69.0,70.5,71.9,73.3,74.6,76.1,77.5],11:[70.3,71.7,73.1,74.5,75.9,77.3,78.8],
+  12:[71.3,72.8,74.2,75.7,77.1,78.5,80.0],13:[72.3,73.8,75.3,76.9,78.3,79.8,81.3],
+  14:[73.3,74.8,76.4,78.0,79.5,81.0,82.5],15:[74.3,75.8,77.4,79.1,80.6,82.2,83.7],
+  16:[75.2,76.8,78.4,80.1,81.6,83.3,84.8],17:[76.1,77.8,79.4,81.1,82.6,84.3,85.9],
+  18:[77.1,78.7,80.4,82.1,83.7,85.4,87.0],19:[78.0,79.7,81.4,83.1,84.7,86.4,88.1],
+  20:[78.9,80.6,82.3,84.1,85.7,87.5,89.2],21:[79.8,81.5,83.3,85.1,86.8,88.5,90.2],
+  22:[80.6,82.4,84.3,86.1,87.8,89.5,91.3],23:[81.5,83.3,85.2,87.1,88.8,90.5,92.3],
+  24:[82.3,84.2,86.1,88.0,89.8,91.5,93.3],25:[83.1,85.1,87.0,89.0,90.8,92.6,94.6],
+  26:[83.9,85.9,87.9,89.9,91.7,93.6,95.6],27:[84.7,86.7,88.8,90.9,92.7,94.6,96.7],
+  28:[85.5,87.5,89.6,91.7,93.6,95.6,97.7],29:[86.2,88.3,90.4,92.6,94.5,96.5,98.7],
+  30:[87.0,89.1,91.2,93.4,95.3,97.3,99.5]
+};
+const WHO_HC_B = { // head circumference-for-age, cm
+   0:[32.1,33.0,33.9,34.9,35.8,36.7,37.6], 1:[34.9,35.9,36.8,37.8,38.7,39.6,40.5],
+   2:[36.8,37.8,38.7,39.7,40.6,41.5,42.4], 3:[38.1,39.1,40.1,41.0,41.9,42.8,43.7],
+   4:[39.3,40.2,41.2,42.1,43.0,43.9,44.8], 5:[40.2,41.1,42.1,43.0,44.0,44.9,45.7],
+   6:[40.9,41.9,42.9,43.8,44.7,45.6,46.5], 7:[41.5,42.5,43.5,44.4,45.4,46.3,47.2],
+   8:[42.1,43.0,44.0,45.0,45.9,46.8,47.7], 9:[42.5,43.5,44.5,45.4,46.4,47.3,48.2],
+  10:[43.0,44.0,44.9,45.9,46.8,47.7,48.6],11:[43.3,44.3,45.3,46.2,47.2,48.1,49.0],
+  12:[43.7,44.7,45.6,46.6,47.5,48.4,49.3],13:[44.0,45.0,45.9,46.9,47.8,48.7,49.7],
+  14:[44.3,45.2,46.2,47.2,48.1,49.0,50.0],15:[44.5,45.5,46.5,47.4,48.4,49.3,50.2],
+  16:[44.7,45.7,46.7,47.7,48.6,49.5,50.5],17:[45.0,46.0,46.9,47.9,48.8,49.8,50.7],
+  18:[45.2,46.2,47.1,48.1,49.1,50.0,50.9],19:[45.4,46.3,47.3,48.3,49.2,50.2,51.1],
+  20:[45.5,46.5,47.5,48.5,49.4,50.4,51.3],21:[45.7,46.7,47.7,48.6,49.6,50.5,51.5],
+  22:[45.8,46.8,47.8,48.8,49.8,50.7,51.7],23:[46.0,47.0,48.0,49.0,49.9,50.9,51.8],
+  24:[46.1,47.1,48.1,49.1,50.0,51.0,52.0],25:[46.3,47.3,48.2,49.2,50.2,51.1,52.1],
+  26:[46.4,47.4,48.4,49.3,50.3,51.3,52.3],27:[46.5,47.5,48.5,49.5,50.5,51.4,52.4],
+  28:[46.6,47.6,48.6,49.6,50.6,51.5,52.5],29:[46.7,47.7,48.7,49.7,50.7,51.6,52.6],
+  30:[46.8,47.8,48.8,49.8,50.8,51.7,52.7]
+};
+const BAND_NAMES  = ['<P3','P3–P10','P10–P25','P25–P50','P50–P75','P75–P90','P90–P97','>P97'];
+const BAND_COLORS = ['var(--red)','var(--yellow)','var(--blue)','var(--accent-l)','var(--accent-l)','var(--blue)','var(--yellow)','var(--red)'];
+
+// ─── Daily core (always shown, in order) ────────────────────────────────────
+const CI_DAILY = [
+  { id:'sleep',       type:'select', field:'sleepBand',
+    q:'Sleep last night + naps?', hint:'Target: 11–14h for this age',
+    opts:['< 9 h','9–11 h','11–14 h','14 h +'], vals:['lt9','9to11','11to14','gt14'], target:'11to14' },
+  { id:'appetite',    type:'select', field:'appetite',
+    q:'Appetite today?', hint:null,
+    opts:['Good','OK','Low'], vals:['good','ok','low'], target:'good' },
+  { id:'mood',        type:'select', field:'mood',
+    q:'Mood overall today?', hint:null,
+    opts:['Happy / easy','Mixed','Fussy'], vals:['happy','mixed','fussy'], target:'happy' },
+  { id:'active',      type:'select', field:'activeBand',
+    q:'Active play today?', hint:'Target: ~3 hours of movement',
+    opts:['A little','~1 hour','Lots','Lots + outdoors'], vals:['little','1h','lots','lots_out'], target:'lots' },
+  { id:'screen_read', type:'screen_read', q:'Screens + reading today?', hint:null },
+];
+
+// ─── Rotating pool (minDays = minimum gap between appearances) ───────────────
+const CI_ROTATING = [
+  { id:'words',         type:'words',     minDays:1  },
+  { id:'two_words',     type:'bool',      minDays:14,
+    q:'Is Mio putting two words together yet?',
+    hint:'e.g. "more milk", "dada up" — a key 24-month milestone', field:'twoWordCombos' },
+  { id:'ms_language',   type:'milestone', domain:'language',         minDays:3 },
+  { id:'ms_cognitive',  type:'milestone', domain:'cognitive',        minDays:4 },
+  { id:'ms_social',     type:'milestone', domain:'social_emotional', minDays:4 },
+  { id:'ms_motor_g',    type:'milestone', domain:'motor_gross',      minDays:5 },
+  { id:'ms_motor_f',    type:'milestone', domain:'motor_fine',       minDays:5 },
+  { id:'ms_adaptive',   type:'milestone', domain:'adaptive',         minDays:5 },
+  { id:'growth',        type:'growth',    minDays:7  },
+  { id:'safety',        type:'safety',    minDays:7  },
 ];
 
 // ═══ DATA MODEL ════════════════════════════════════════════════════════════
@@ -178,7 +283,14 @@ let onboardStep = 0;
 let gdriveToken = null;
 let gdriveFileId = null;
 let gdriveRefreshTimer = null;
+let _driveSync = false;        // lock: one sync at a time
+let _driveSyncFailed = false;  // for banner state
 let _db = null;
+let checkinState = null;   // null = not active; object = check-in in progress
+let _ciMS = {};            // temp storage for milestone items (avoids string-escaping issues)
+let _msEditItem = null;    // milestone item being edited in modal
+let advisorMsgs = [];      // {role:'user'|'assistant', content:string}
+let advisorBusy = false;   // true while waiting for advisor response
 
 // ═══ HELPERS ═══════════════════════════════════════════════════════════════
 function clone(o) { return JSON.parse(JSON.stringify(o)); }
@@ -201,6 +313,171 @@ function ageStr(dob) {
   if (y === 0) return `${m} months old`;
   if (mo === 0) return `${y} year${y !== 1 ? 's' : ''} old`;
   return `${y}y ${mo}mo old`;
+}
+
+function ageMonthsAt(dob, atDate) {
+  const birth = new Date((dob || MIO_DOB) + 'T00:00:00');
+  const at    = new Date((atDate || today()) + 'T00:00:00');
+  let months = (at.getFullYear() - birth.getFullYear()) * 12 + (at.getMonth() - birth.getMonth());
+  if (at.getDate() < birth.getDate()) months--;
+  return Math.max(0, months);
+}
+
+// ─── General helpers ─────────────────────────────────────────────────────────
+function sevenDaysAgo() {
+  const d = new Date(); d.setDate(d.getDate() - 7);
+  return d.toISOString().slice(0, 10);
+}
+
+function summarizeBands(rows, field, labels) {
+  const counts = {};
+  for (const r of rows) {
+    const v = r[field];
+    if (v != null) { const k = labels[v] || v; counts[k] = (counts[k]||0)+1; }
+  }
+  const entries = Object.entries(counts);
+  if (!entries.length) return 'not logged';
+  return entries.map(([k,c]) => `${k}×${c}`).join(', ');
+}
+
+function renderMD(text) {
+  // Minimal safe markdown: escape HTML first, then apply bold/italic/newlines
+  return String(text||'')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g,'<em>$1</em>')
+    .replace(/\n\n+/g,'<br><br>')
+    .replace(/\n/g,'<br>');
+}
+
+// ─── WHO growth helpers ───────────────────────────────────────────────────────
+function whoInterp(month, table) {
+  const months = Object.keys(table).map(Number).sort((a,b)=>a-b);
+  const mn = months[0], mx = months[months.length-1];
+  if (month <= mn) return table[mn];
+  if (month >= mx) return table[mx];
+  let lo = mn, hi = mx;
+  for (let i = 0; i < months.length-1; i++) {
+    if (months[i] <= month && months[i+1] >= month) { lo = months[i]; hi = months[i+1]; break; }
+  }
+  const t = (month - lo) / (hi - lo);
+  return table[lo].map((v, i) => +(v + t * (table[hi][i] - v)).toFixed(3));
+}
+
+function getBandIdx(month, value, table) {
+  const row = whoInterp(month, table);
+  if (!row) return null;
+  if (value < row[0]) return 0;
+  for (let i = 0; i < 6; i++) { if (value < row[i+1]) return i+1; }
+  return 7;
+}
+
+function getBandInfo(month, value, table) {
+  const idx = getBandIdx(month, value, table);
+  if (idx === null) return null;
+  return { band: BAND_NAMES[idx], color: BAND_COLORS[idx], idx };
+}
+
+function checkBandCrossing(growthData, field, table) {
+  const entries = (growthData||[]).filter(g => g[field] != null && g.ageMonths != null)
+    .sort((a,b) => a.date.localeCompare(b.date));
+  if (entries.length < 2) return null;
+  const last2 = entries.slice(-2);
+  const b1 = getBandIdx(last2[0].ageMonths, last2[0][field], table);
+  const b2 = getBandIdx(last2[1].ageMonths, last2[1][field], table);
+  if (b1 === null || b2 === null) return null;
+  if (Math.abs(b2 - b1) >= 2) return { from: BAND_NAMES[b1], to: BAND_NAMES[b2] };
+  return null;
+}
+
+function buildWhoChart(growthEntries, field, table, unit) {
+  const W = 360, H = 160, ML = 36, MR = 28, MT = 6, MB = 22;
+  const CW = W - ML - MR, CH = H - MT - MB;
+
+  const pts = (growthEntries||[])
+    .filter(g => g[field] != null && g.ageMonths != null)
+    .sort((a,b) => a.date.localeCompare(b.date))
+    .map(g => ({ m: g.ageMonths, v: g[field] }));
+
+  const curAge  = ageMonths(data.child?.dob || MIO_DOB);
+  const tMonths = Object.keys(table).map(Number).sort((a,b)=>a-b);
+  const maxM    = Math.min(30, Math.max(tMonths[tMonths.length-1], curAge + 2));
+
+  const allV = tMonths.map(m=>table[m]).flat();
+  const yRMin = Math.min(...allV), yRMax = Math.max(...allV);
+  const yPad  = (yRMax - yRMin) * 0.06;
+  const yMin  = yRMin - yPad, yMax = yRMax + yPad;
+
+  const xp = m   => ML + (m / maxM) * CW;
+  const yp = val => MT + CH * (1 - (val - yMin) / (yMax - yMin));
+
+  // P25–P75 band (normal range)
+  const mF = tMonths.filter(m => m <= maxM);
+  const polyN = [
+    ...mF.map(m => `${xp(m).toFixed(1)},${yp(table[m][4]).toFixed(1)}`),
+    ...[...mF].reverse().map(m => `${xp(m).toFixed(1)},${yp(table[m][2]).toFixed(1)}`)
+  ].join(' ');
+  // P3–P97 outer band
+  const polyO = [
+    ...mF.map(m => `${xp(m).toFixed(1)},${yp(table[m][6]).toFixed(1)}`),
+    ...[...mF].reverse().map(m => `${xp(m).toFixed(1)},${yp(table[m][0]).toFixed(1)}`)
+  ].join(' ');
+
+  const bands = `
+    <polygon points="${polyO}" fill="rgba(125,133,144,.05)" />
+    <polygon points="${polyN}" fill="rgba(63,185,80,.08)" />`;
+
+  // Percentile reference lines
+  const PLINES = [
+    {i:0,c:'rgba(248,81,73,.55)',  da:'4,3', lb:'P3' },
+    {i:1,c:'rgba(227,179,65,.4)',  da:'3,3', lb:''   },
+    {i:3,c:'rgba(125,133,144,.45)',da:'',    lb:'P50'},
+    {i:5,c:'rgba(227,179,65,.4)',  da:'3,3', lb:''   },
+    {i:6,c:'rgba(248,81,73,.55)',  da:'4,3', lb:'P97'},
+  ];
+  let pLines = '';
+  for (const p of PLINES) {
+    const d = mF.map((m,k) => `${k===0?'M':'L'}${xp(m).toFixed(1)},${yp(table[m][p.i]).toFixed(1)}`).join(' ');
+    pLines += `<path d="${d}" fill="none" stroke="${p.c}" stroke-width="1" ${p.da?`stroke-dasharray="${p.da}"`:''} />`;
+    if (p.lb) {
+      const lm = mF[mF.length-1];
+      pLines += `<text x="${(xp(lm)+3).toFixed(1)}" y="${(yp(table[lm][p.i])+3).toFixed(1)}" font-size="7.5" fill="${p.c.replace(/[\d.]+\)$/,'0.9)')}">${p.lb}</text>`;
+    }
+  }
+
+  // Mio's data
+  let mioLine = '';
+  if (pts.length >= 2) {
+    const pd = pts.map((p,i) => `${i===0?'M':'L'}${xp(p.m).toFixed(1)},${yp(p.v).toFixed(1)}`).join(' ');
+    mioLine = `<path d="${pd}" fill="none" stroke="#3fb950" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />`;
+  }
+  const mioDots = pts.map(p =>
+    `<circle cx="${xp(p.m).toFixed(1)}" cy="${yp(p.v).toFixed(1)}" r="4" fill="#3fb950" stroke="#0d1117" stroke-width="1.5" />`
+  ).join('');
+
+  // Axes + labels
+  const xStep = maxM <= 18 ? 3 : 6;
+  let xTicks = '';
+  for (let m = 0; m <= maxM; m += xStep) {
+    const x = xp(m).toFixed(1);
+    xTicks += `<line x1="${x}" y1="${MT+CH}" x2="${x}" y2="${MT+CH+3}" stroke="rgba(48,54,61,.8)" stroke-width="1"/>
+      <text x="${x}" y="${MT+CH+13}" font-size="8" fill="rgba(125,133,144,.8)" text-anchor="middle">${m}</text>`;
+  }
+  let yLabels = '';
+  for (let i = 0; i <= 4; i++) {
+    const val = yMin + (yMax - yMin) * (i / 4);
+    const y   = yp(val).toFixed(1);
+    yLabels += `<line x1="${ML-2}" y1="${y}" x2="${ML}" y2="${y}" stroke="rgba(48,54,61,.8)" stroke-width="1"/>
+      <text x="${ML-4}" y="${(+y+3).toFixed(1)}" font-size="8" fill="rgba(125,133,144,.8)" text-anchor="end">${val.toFixed(1)}</text>`;
+  }
+  const axes = `
+    <line x1="${ML}" y1="${MT}" x2="${ML}" y2="${MT+CH}" stroke="rgba(48,54,61,.8)" stroke-width="1"/>
+    <line x1="${ML}" y1="${MT+CH}" x2="${ML+CW}" y2="${MT+CH}" stroke="rgba(48,54,61,.8)" stroke-width="1"/>
+    <text x="${(ML+CW/2).toFixed(1)}" y="${H-3}" font-size="8" fill="rgba(125,133,144,.6)" text-anchor="middle">age (months)</text>`;
+
+  return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block;overflow:visible">
+    ${axes}${xTicks}${yLabels}${bands}${pLines}${mioLine}${mioDots}
+  </svg>`;
 }
 
 // ═══ INDEXEDDB ════════════════════════════════════════════════════════════
@@ -232,9 +509,13 @@ async function dbSet(k, v) {
 }
 
 // ═══ SAVE / LOAD ══════════════════════════════════════════════════════════
-// Phase 1: local-only. Phase 6 will add merge-before-save Drive PATCH here.
 async function save() {
   await dbSet('data', clone(data));
+  if (gdriveToken && gdriveFileId) _saveToDriveAsync(); // non-blocking background sync
+  else if (gdriveToken && !gdriveFileId) {
+    // File not yet found/created — try now then sync
+    findOrCreateDriveFile().then(id => { if (id) _saveToDriveAsync(); });
+  }
 }
 
 async function loadData() {
@@ -260,7 +541,12 @@ async function launchApp() {
     seedKnownData();
     await save();
   }
-  sv('home');
+  sv('home'); // render immediately for responsiveness
+  // Sync from Drive on open (non-blocking after initial render)
+  if (gdriveToken) {
+    if (!gdriveFileId) await findOrCreateDriveFile();
+    if (gdriveFileId) syncFromDrive(); // async, will re-render if remote has new data
+  }
 }
 
 // ═══ DRIVE AUTH (connect only — sync in Phase 6) ═══════════════════════
@@ -297,8 +583,12 @@ async function connectDrive() {
       const expiry = Date.now() + ((r.expires_in || 3599) * 1000);
       await dbSet('gdriveExpiry', expiry);
       scheduleTokenRefresh((r.expires_in || 3599) * 1000);
-      // Phase 6 will add findOrCreateDriveFile() and loadFromDrive() here.
-      toast('✅ Google account connected! Drive sync activates in Phase 6.');
+      toast('☁️ Connected — finding Drive file…');
+      updateHdr();
+      if (view === 'settings') renderView();
+      await findOrCreateDriveFile();
+      await syncFromDrive();
+      toast('✅ Drive connected — data synced!');
       updateHdr();
       if (view === 'settings') renderView();
     }
@@ -328,6 +618,164 @@ async function tryRestoreAuth() {
     gdriveFileId = await dbGet('gdriveFileId') || null;
     scheduleTokenRefresh(expiry - Date.now());
   } catch (e) {}
+}
+
+// ═══ DRIVE SYNC ═══════════════════════════════════════════════════════════════
+
+// ─── Merge helpers ──────────────────────────────────────────────────────────
+function _mergeById(local, remote) {
+  // Union by id. For same id, take the item with the later date.
+  const map = new Map();
+  for (const item of (remote||[])) map.set(item.id, item);
+  for (const item of (local||[])) {
+    if (!map.has(item.id)) { map.set(item.id, item); continue; }
+    const existing = map.get(item.id);
+    if ((item.date||'') >= (existing.date||'')) map.set(item.id, item);
+  }
+  return [...map.values()];
+}
+
+function _mergeWellbeing(local, remote) {
+  // One row per date. For same date, union non-null fields (local wins on conflict).
+  const byDate = new Map();
+  for (const wb of (remote||[])) byDate.set(wb.date, {...wb});
+  for (const wb of (local||[])) {
+    if (!byDate.has(wb.date)) { byDate.set(wb.date, {...wb}); continue; }
+    const merged = {...byDate.get(wb.date)};
+    for (const [k,v] of Object.entries(wb)) { if (v != null) merged[k] = v; }
+    byDate.set(wb.date, merged);
+  }
+  return [...byDate.values()].sort((a,b) => a.date.localeCompare(b.date));
+}
+
+function _mergeCheckinLog(local, remote) {
+  // One row per date. Union answeredKeys and skippedKeys.
+  const byDate = new Map();
+  for (const log of (remote||[])) byDate.set(log.date, { ...log, answeredKeys:[...(log.answeredKeys||[])], skippedKeys:[...(log.skippedKeys||[])] });
+  for (const log of (local||[])) {
+    if (!byDate.has(log.date)) { byDate.set(log.date, {...log}); continue; }
+    const ex = byDate.get(log.date);
+    byDate.set(log.date, { ...ex,
+      answeredKeys: [...new Set([...ex.answeredKeys||[], ...log.answeredKeys||[]])],
+      skippedKeys:  [...new Set([...ex.skippedKeys||[],  ...log.skippedKeys||[]])],
+    });
+  }
+  return [...byDate.values()].sort((a,b) => a.date.localeCompare(b.date));
+}
+
+function mergeData(local, remote) {
+  if (!remote) return local;
+  if (!local)  return remote;
+  // Child: prefer local non-null fields
+  const child = { ...remote.child, ...local.child };
+  // Settings: merge; take later checkinDoneDate
+  const ls = local.settings  || {}, rs = remote.settings || {};
+  const settings = { ...clone(DEF.settings), ...rs, ...ls,
+    checkinDoneDate: (ls.checkinDoneDate||'') >= (rs.checkinDoneDate||'') ? (ls.checkinDoneDate||null) : (rs.checkinDoneDate||null)
+  };
+  // safetyStatus: take later date per key
+  const safetyStatus = { ...(remote.safetyStatus||{}) };
+  for (const [k,v] of Object.entries(local.safetyStatus||{})) {
+    if (!safetyStatus[k] || v > safetyStatus[k]) safetyStatus[k] = v;
+  }
+  return {
+    version: Math.max(local.version||1, remote.version||1),
+    child,
+    settings,
+    safetyStatus,
+    growth:       _mergeById(local.growth,       remote.growth),
+    milestones:   _mergeById(local.milestones,   remote.milestones),
+    words:        _mergeById(local.words,         remote.words),
+    immunizations:_mergeById(local.immunizations, remote.immunizations),
+    activities:   _mergeById(local.activities,    remote.activities),
+    wellbeing:    _mergeWellbeing(local.wellbeing,   remote.wellbeing),
+    checkinLog:   _mergeCheckinLog(local.checkinLog, remote.checkinLog),
+  };
+}
+
+// ─── Drive API ───────────────────────────────────────────────────────────────
+async function findOrCreateDriveFile() {
+  if (!gdriveToken) return null;
+  try {
+    const q  = encodeURIComponent(`name='${DRIVE_FILE_NAME}' and trashed=false`);
+    const sr = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&spaces=drive`,
+      { headers: { Authorization: `Bearer ${gdriveToken}` } }
+    );
+    if (!sr.ok) return null;
+    const { files } = await sr.json();
+    if (files && files.length > 0) {
+      gdriveFileId = files[0].id;
+      await dbSet('gdriveFileId', gdriveFileId);
+      return gdriveFileId;
+    }
+    // Create new file with current data
+    const boundary = 'mio_mp_boundary';
+    const meta     = JSON.stringify({ name: DRIVE_FILE_NAME, mimeType: 'application/json' });
+    const content  = JSON.stringify(clone(data));
+    const body     = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${content}\r\n--${boundary}--`;
+    const cr = await fetch(
+      `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id`,
+      { method:'POST', headers:{ Authorization:`Bearer ${gdriveToken}`, 'Content-Type':`multipart/related; boundary=${boundary}` }, body }
+    );
+    if (!cr.ok) return null;
+    const { id } = await cr.json();
+    gdriveFileId = id;
+    await dbSet('gdriveFileId', id);
+    return id;
+  } catch(e) { console.warn('findOrCreateDriveFile:', e); return null; }
+}
+
+async function syncFromDrive() {
+  // Download and merge — no upload. Used on app open.
+  if (!gdriveToken || !gdriveFileId) return;
+  try {
+    const res = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${gdriveFileId}?alt=media`,
+      { headers: { Authorization: `Bearer ${gdriveToken}` } }
+    );
+    if (!res.ok) return;
+    const remote = await res.json();
+    const before = JSON.stringify(data);
+    data = mergeData(data, remote);
+    await dbSet('data', clone(data));
+    if (JSON.stringify(data) !== before) renderView();
+  } catch(e) { console.warn('syncFromDrive:', e); }
+}
+
+async function _saveToDriveAsync() {
+  // Merge-before-save: download latest, merge, upload. Non-blocking.
+  if (_driveSync || !gdriveToken || !gdriveFileId) return;
+  _driveSync = true;
+  try {
+    // 1. Download latest Drive version
+    const dlRes = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${gdriveFileId}?alt=media`,
+      { headers: { Authorization: `Bearer ${gdriveToken}` } }
+    );
+    if (dlRes.ok) {
+      const remote = await dlRes.json();
+      const before = JSON.stringify(data);
+      data = mergeData(data, remote);
+      if (JSON.stringify(data) !== before) {
+        await dbSet('data', clone(data));
+        renderView();
+      }
+    }
+    // 2. Upload merged data
+    const ulRes = await fetch(
+      `https://www.googleapis.com/upload/drive/v3/files/${gdriveFileId}?uploadType=media`,
+      { method:'PATCH', headers:{ Authorization:`Bearer ${gdriveToken}`, 'Content-Type':'application/json' }, body: JSON.stringify(data) }
+    );
+    _driveSyncFailed = !ulRes.ok;
+    if (!ulRes.ok) console.warn('Drive upload failed:', ulRes.status);
+  } catch(e) {
+    _driveSyncFailed = true;
+    console.warn('Drive sync error:', e);
+  } finally {
+    _driveSync = false;
+    updateHdr();
+  }
 }
 
 // ═══ EXPORT / IMPORT ══════════════════════════════════════════════════════
@@ -409,8 +857,10 @@ function updateHdr() {
   const mo = ageMonths(dob);
 
   const driveBanner = !gdriveToken
-    ? `<div class="drive-banner">⚠️ Drive sync not connected — data saved locally only <button onclick="connectDrive()">Connect</button></div>`
-    : `<div class="drive-banner ok">☁️ Google connected — Drive sync activates in Phase 6</div>`;
+    ? `<div class="drive-banner">⚠️ Drive not connected — data saved locally <button onclick="connectDrive()">Connect</button></div>`
+    : _driveSyncFailed
+      ? `<div class="drive-banner" style="background:rgba(227,179,65,.12);border-color:rgba(227,179,65,.3);color:#e3b341">⚠️ Drive sync — last sync had an error. Will retry on next save.</div>`
+      : `<div class="drive-banner ok">☁️ Drive synced — both parents share one dataset</div>`;
 
   document.getElementById('header').innerHTML = `
     ${driveBanner}
@@ -433,49 +883,48 @@ function updateHdr() {
 // ═══ HOME VIEW ════════════════════════════════════════════════════════════
 function buildHome() {
   if (!data.settings?.onboardingDone) return buildOnboarding();
-
+  const checkinDone = data.settings?.checkinDoneDate === today();
+  if (!checkinDone) return buildCheckinUI();
+  return buildHomeDone();
+}
+function buildHomeDone() {
   const dob = data.child?.dob || MIO_DOB;
   const mo = ageMonths(dob);
   const wordCount = (data.words || []).length;
-  const checkinDone = data.settings?.checkinDoneDate === today();
   const lastGrowth = (data.growth || []).slice().sort((a,b) => b.date.localeCompare(a.date))[0];
-
-  const phases = [
-    { done: true,  label: 'Phase 1: Scaffold' },
-    { done: true,  label: 'Phase 2: Onboarding + baseline data' },
-    { done: false, label: 'Phase 3: Daily check-in engine' },
-    { done: false, label: 'Phase 4: Milestones + Trends views' },
-    { done: false, label: 'Phase 5: Growth + WHO percentile curves' },
-    { done: false, label: 'Phase 6: Drive sync — two-device sharing' },
-    { done: false, label: 'Phase 7: AI Advisor (KB-grounded chat)' },
-    { done: false, label: 'Phase 8: Polish + wife onboarding' },
-  ];
+  const todayWB = (data.wellbeing || []).find(w => w.date === today());
+  const MOOD_ICON = { happy:'😊', mixed:'😐', fussy:'😣' };
+  const SLEEP_COLOR = { lt9:'var(--red)', '9to11':'var(--yellow)', '11to14':'var(--green)', gt14:'var(--blue)' };
 
   return `
     <div style="padding:12px 13px 0">
 
-      <div class="card" style="background:linear-gradient(135deg,#112a1a 0%,#0d1e12 100%);border-color:#2a5c38">
-        <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#7bc9a0;font-weight:700;margin-bottom:8px">Daily Check-In</div>
-        <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:8px">
-          ${checkinDone ? '✅ Done for today!' : 'Coming in Phase 3'}
-        </div>
-        <div style="font-size:13px;color:#5a9e77;line-height:1.5">
-          ${checkinDone
-            ? 'Both parents can add to today\'s entry — tap again to review.'
-            : '5–10 quick taps each day will build Mio\'s full developmental record here.'}
-        </div>
+      <div class="card" style="background:linear-gradient(135deg,#112a1a 0%,#0d1e12 100%);border-color:#2a5c38;margin-bottom:10px">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#7bc9a0;font-weight:700;margin-bottom:6px">Daily Check-In — ✅ Done</div>
+        ${todayWB ? `<div style="display:flex;flex-wrap:wrap;gap:14px;margin-bottom:8px">
+          ${todayWB.sleepBand ? `<div><div style="font-size:10px;color:#5a9e77">Sleep</div><div style="font-weight:700;color:${SLEEP_COLOR[todayWB.sleepBand]||'var(--text)'}">${esc(todayWB.sleepBand)}</div></div>` : ''}
+          ${todayWB.mood ? `<div><div style="font-size:10px;color:#5a9e77">Mood</div><div style="font-weight:700">${MOOD_ICON[todayWB.mood]||''} ${esc(todayWB.mood)}</div></div>` : ''}
+          ${todayWB.appetite ? `<div><div style="font-size:10px;color:#5a9e77">Appetite</div><div style="font-weight:700">${esc(todayWB.appetite)}</div></div>` : ''}
+          ${todayWB.readTogether != null ? `<div><div style="font-size:10px;color:#5a9e77">Reading</div><div style="font-weight:700">${todayWB.readTogether ? 'Yes ✓' : '—'}</div></div>` : ''}
+        </div>` : ''}
+        <div style="font-size:12px;color:#5a9e77">Both parents can still add words below.</div>
       </div>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 0 10px">
-        <div class="scard">
-          <div class="s-lbl">Words</div>
-          <div class="s-val" style="color:var(--accent-l)">${wordCount}</div>
-          <div class="s-sub">all languages</div>
+        <div class="scard"><div class="s-lbl">Words</div><div class="s-val" style="color:var(--accent-l)">${wordCount}</div><div class="s-sub">all languages</div></div>
+        <div class="scard"><div class="s-lbl">Age</div><div class="s-val" style="font-size:19px;color:var(--text)">${mo}<span style="font-size:11px;font-weight:400;color:var(--muted)">mo</span></div><div class="s-sub">born ${dob}</div></div>
+      </div>
+
+      <div class="card" style="margin:0 0 10px">
+        <div class="card-title">Add a word</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:10px">All languages. Any time.</div>
+        <div style="display:flex;gap:6px;margin-bottom:6px">
+          <input class="mi" id="home-word" placeholder="Word or sound" style="flex:2">
+          <input class="mi" id="home-meaning" placeholder="Meaning?" style="flex:1">
         </div>
-        <div class="scard">
-          <div class="s-lbl">Age</div>
-          <div class="s-val" style="font-size:19px;color:var(--text)">${mo}<span style="font-size:11px;font-weight:400;color:var(--muted)">mo</span></div>
-          <div class="s-sub">born ${dob}</div>
+        <div style="display:flex;gap:6px">
+          <select class="mi" id="home-lang" style="flex:1"><option value="Filipino">Filipino</option><option value="English">English</option><option value="Other">Other</option></select>
+          <button onclick="homeAddWord()" style="background:var(--accent);color:#fff;border:none;border-radius:var(--rs);padding:10px 16px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">+ Add</button>
         </div>
       </div>
 
@@ -488,17 +937,10 @@ function buildHome() {
           ${lastGrowth.headCm ? `<div><div style="font-size:18px;font-weight:800">${lastGrowth.headCm} cm</div><div style="font-size:11px;color:var(--muted)">head</div></div>` : ''}
         </div>
         <div style="font-size:11px;color:var(--muted);margin-top:6px">${lastGrowth.date} · ${lastGrowth.ageMonths}mo</div>
-      </div>` : ''}
-
+      </div>` : `
       <div class="card" style="margin:0 0 10px;border-style:dashed">
-        <div class="card-title">🚧 Build Progress</div>
-        ${phases.map(p => `
-          <div class="phase-row ${p.done ? 'done' : ''}">
-            <div class="phase-dot ${p.done ? 'done' : ''}"></div>
-            <span>${p.label}</span>
-          </div>
-        `).join('')}
-      </div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.6">No measurements yet. You can add them in the <strong style="color:var(--text)">Growth</strong> tab.</div>
+      </div>`}
 
     </div>
     <div class="gap"></div>
@@ -770,86 +1212,877 @@ function importOnboardData() {
   inp.click();
 }
 
+// ═══ CHECK-IN ENGINE ══════════════════════════════════════════════════════
+
+function getNextMilestoneForDomain(domain) {
+  const items = CDC_ITEMS.filter(x => x.domain === domain);
+  const existing = data.milestones || [];
+  for (const ci of items) {
+    const found = existing.find(m => m.item === ci.item);
+    if (!found || found.status !== 'reached') return ci;
+  }
+  return null;
+}
+
+function buildCheckinQuestions() {
+  const questions = [...CI_DAILY];
+  const t = today();
+  const log = data.checkinLog || [];
+  const lastShown = {};
+  for (const entry of log) {
+    for (const k of (entry.answeredKeys || [])) { if (!lastShown[k] || entry.date > lastShown[k]) lastShown[k] = entry.date; }
+    for (const k of (entry.skippedKeys  || [])) { if (!lastShown[k] || entry.date > lastShown[k]) lastShown[k] = entry.date; }
+  }
+  const eligible = CI_ROTATING.filter(item => {
+    const last = lastShown[item.id];
+    if (!last) return true;
+    return Math.floor((new Date(t) - new Date(last)) / 86400000) >= item.minDays;
+  });
+  const rotating = [];
+  for (const item of eligible) {
+    if (rotating.length >= 3) break;
+    if (item.type === 'milestone') {
+      const next = getNextMilestoneForDomain(item.domain);
+      if (!next) continue;
+      rotating.push({ ...item, milestoneItem: next });
+    } else {
+      rotating.push(item);
+    }
+  }
+  return [...questions, ...rotating].slice(0, 8);
+}
+
+function initCheckin() {
+  checkinState = {
+    questions: buildCheckinQuestions(),
+    step: 0,
+    wellbeing: { id:uid(), date:today(), sleepBand:null, appetite:null, mood:null, activeBand:null, screenBand:null, readTogether:null, note:'' },
+    newWords: [],
+    newMilestones: [],
+    growthEntry: null,
+    answeredKeys: [],
+    skippedKeys: [],
+    _screenVal: null,
+    _readVal: null,
+  };
+}
+
+function buildCheckinUI() {
+  if (!checkinState) initCheckin();
+  const { questions, step } = checkinState;
+  if (step >= questions.length) { finishCheckin(); return ''; }
+  const q = questions[step];
+  const total = questions.length;
+  const dots = questions.map((_,i) =>
+    `<div style="width:7px;height:7px;border-radius:50%;flex-shrink:0;background:${i<step?'var(--accent)':i===step?'var(--accent-l)':'var(--border)'};transition:background .2s"></div>`
+  ).join('');
+  const progress = `<div style="display:flex;align-items:center;gap:5px;margin:0 13px 14px">${dots}<span style="font-size:11px;color:var(--muted);margin-left:4px">${step+1} / ${total}</span></div>`;
+  let card = '';
+  if      (q.type === 'select')      card = buildCISelect(q);
+  else if (q.type === 'screen_read') card = buildCIScreenRead(q);
+  else if (q.type === 'words')       card = buildCIWords(q);
+  else if (q.type === 'bool')        card = buildCIBool(q);
+  else if (q.type === 'milestone')   card = buildCIMilestone(q);
+  else if (q.type === 'growth')      card = buildCIGrowth(q);
+  else if (q.type === 'safety')      card = buildCISafety(q);
+  return `<div style="padding:14px 0 0"><div style="padding:0 13px 10px"><div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--accent-l);font-weight:700;margin-bottom:3px">Daily Check-In</div><div style="font-size:13px;color:var(--muted)">Quick taps — skip anything</div></div>${progress}${card}</div><div class="gap"></div>`;
+}
+
+function ciSkipBtn(id) {
+  return `<div style="text-align:center;margin:8px 13px 4px"><button onclick="ciSkip('${id}')" style="background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;font-family:inherit;padding:8px 24px">Skip</button></div>`;
+}
+
+function buildCISelect(q) {
+  return `<div class="card" style="margin-bottom:10px">
+    <div style="font-size:18px;font-weight:700;margin-bottom:${q.hint?'6px':'14px'}">${esc(q.q)}</div>
+    ${q.hint?`<div style="font-size:12px;color:var(--muted);margin-bottom:14px">${esc(q.hint)}</div>`:''}
+    <div style="display:flex;flex-direction:column;gap:8px">
+      ${q.opts.map((opt,i)=>`<button onclick="ciSelectAnswer('${q.id}','${q.field}','${q.vals[i]}')"
+        style="width:100%;text-align:left;padding:13px 15px;border-radius:var(--rs);cursor:pointer;font-family:inherit;font-size:15px;font-weight:600;color:var(--text);
+          background:${q.vals[i]===q.target?'rgba(63,185,80,.08)':'var(--surface2)'};
+          border:1.5px solid ${q.vals[i]===q.target?'rgba(63,185,80,.3)':'var(--border)'}">${esc(opt)}${q.vals[i]===q.target?' <span style="font-size:11px;color:var(--accent);font-weight:400">✓ target</span>':''}</button>`).join('')}
+    </div>
+  </div>${ciSkipBtn(q.id)}`;
+}
+
+function buildCIScreenRead(q) {
+  const sv = checkinState._screenVal, rv = checkinState._readVal;
+  const sVals = ['none','little','lot'], sOpts = ['None','A little (with us)','A lot'];
+  return `<div class="card" style="margin-bottom:10px">
+    <div style="font-size:18px;font-weight:700;margin-bottom:14px">Screens + reading?</div>
+    <div style="font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);font-weight:700;margin-bottom:8px">Screen time today</div>
+    <div style="display:flex;gap:7px;margin-bottom:18px">
+      ${sVals.map((v,i)=>`<button onclick="ciScreenPick('${v}')" style="flex:1;padding:10px 4px;border-radius:var(--rs);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;color:var(--text);border:1.5px solid ${v===sv?'rgba(63,185,80,.4)':'var(--border)'};background:${v===sv?'rgba(63,185,80,.1)':'var(--surface2)'}">${sOpts[i]}</button>`).join('')}
+    </div>
+    <div style="font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);font-weight:700;margin-bottom:8px">Read together today?</div>
+    <div style="display:flex;gap:7px">
+      <button onclick="ciReadPick(true)"  style="flex:1;padding:12px;border-radius:var(--rs);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;color:var(--text);border:1.5px solid ${rv===true?'rgba(63,185,80,.4)':'var(--border)'};background:${rv===true?'rgba(63,185,80,.1)':'var(--surface2)'}">Yes ✓</button>
+      <button onclick="ciReadPick(false)" style="flex:1;padding:12px;border-radius:var(--rs);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;color:var(--text);border:1.5px solid ${rv===false?'rgba(248,81,73,.3)':'var(--border)'};background:${rv===false?'rgba(248,81,73,.08)':'var(--surface2)'}">Not today</button>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;margin:0 13px">
+    <button onclick="ciSkip('screen_read')" class="mb cancel" style="flex:1">Skip</button>
+    <button onclick="ciScreenReadNext()" class="mb primary" style="flex:2">Next →</button>
+  </div>`;
+}
+
+
+function buildCIWords(q) {
+  const words = checkinState.newWords || [];
+  return `<div class="card" style="margin-bottom:10px">
+    <div style="font-size:18px;font-weight:700;margin-bottom:6px">New words or sounds today?</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px">All languages count. Partial sounds too.</div>
+    ${words.length?`<div style="margin-bottom:12px">${words.map(w=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border)"><div><span style="font-weight:700">${esc(w.word)}</span>${w.meaning?` <span style="color:var(--muted);font-size:12px">· ${esc(w.meaning)}</span>`:''} <span style="font-size:11px;color:var(--accent-l)">${esc(w.language)}</span></div><button onclick="ciRemoveWord('${w.id}')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px;padding:0 4px">×</button></div>`).join('')}</div>`:`<div style="font-size:13px;color:var(--muted);margin-bottom:12px;font-style:italic">None added yet</div>`}
+    <div style="display:flex;gap:6px;margin-bottom:8px">
+      <input class="mi" id="ci-word" placeholder="Word or sound" style="flex:2">
+      <input class="mi" id="ci-meaning" placeholder="Meaning?" style="flex:1">
+    </div>
+    <div style="display:flex;gap:6px">
+      <select class="mi" id="ci-lang" style="flex:1"><option value="Filipino">Filipino</option><option value="English">English</option><option value="Other">Other</option></select>
+      <button onclick="ciAddWord()" style="background:var(--accent);color:#fff;border:none;border-radius:var(--rs);padding:10px 16px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">+ Add</button>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;margin:0 13px">
+    <button onclick="ciSkip('words')" class="mb cancel" style="flex:1">None today</button>
+    <button onclick="ciWordsNext()" class="mb primary" style="flex:2">Next →</button>
+  </div>`;
+}
+
+function buildCIBool(q) {
+  return `<div class="card" style="margin-bottom:10px">
+    <div style="font-size:18px;font-weight:700;margin-bottom:${q.hint?'6px':'18px'}">${esc(q.q)}</div>
+    ${q.hint?`<div style="font-size:12px;color:var(--muted);margin-bottom:18px">${esc(q.hint)}</div>`:''}
+    <div style="display:flex;gap:8px">
+      <button onclick="ciBoolAnswer('${q.id}','${q.field}',true)"  style="flex:1;padding:16px;border-radius:var(--rs);font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;border:1.5px solid rgba(63,185,80,.3);background:rgba(63,185,80,.08);color:var(--text)">Yes ✓</button>
+      <button onclick="ciBoolAnswer('${q.id}','${q.field}',false)" style="flex:1;padding:16px;border-radius:var(--rs);font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;border:1.5px solid var(--border);background:var(--surface2);color:var(--text)">Not yet</button>
+    </div>
+  </div>${ciSkipBtn(q.id)}`;
+}
+
+function buildCIMilestone(q) {
+  const ci = q.milestoneItem;
+  _ciMS[q.id] = ci;
+  const DLABELS = { language:'Language', cognitive:'Cognitive', social_emotional:'Social', motor_gross:'Gross Motor', motor_fine:'Fine Motor', adaptive:'Self-Help' };
+  return `<div class="card" style="margin-bottom:10px">
+    <div style="font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--accent-l);font-weight:700;margin-bottom:8px">Milestone · ${DLABELS[q.domain]||q.domain}</div>
+    <div style="font-size:17px;font-weight:700;margin-bottom:18px">${esc(ci.item)}</div>
+    <div style="display:flex;gap:6px">
+      <button onclick="ciMilestoneAnswer('${q.id}','reached')"    style="flex:1;padding:12px 4px;border-radius:var(--rs);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;border:1.5px solid rgba(63,185,80,.4);background:rgba(63,185,80,.1);color:var(--green)">✓ Yes</button>
+      <button onclick="ciMilestoneAnswer('${q.id}','attempting')" style="flex:1;padding:12px 4px;border-radius:var(--rs);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;border:1.5px solid rgba(227,179,65,.4);background:rgba(227,179,65,.1);color:var(--yellow)">~ Trying</button>
+      <button onclick="ciMilestoneAnswer('${q.id}','not-yet')"    style="flex:1;padding:12px 4px;border-radius:var(--rs);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;border:1.5px solid var(--border);background:var(--surface2);color:var(--muted)">✗ Not yet</button>
+    </div>
+  </div>${ciSkipBtn(q.id)}`;
+}
+
+function buildCIGrowth(q) {
+  return `<div class="card" style="margin-bottom:10px">
+    <div style="font-size:18px;font-weight:700;margin-bottom:6px">Weighed or measured him recently?</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Skip if you don't have numbers — just a weekly prompt.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+      <div><div class="ml">Weight (kg)</div><input class="mi" id="ci-wt" type="number" step="0.01" inputmode="decimal" placeholder="e.g. 11"></div>
+      <div><div class="ml">Height (cm)</div><input class="mi" id="ci-ht" type="number" step="0.1"  inputmode="decimal" placeholder="e.g. 82"></div>
+      <div><div class="ml">Head (cm)</div><input class="mi" id="ci-hd" type="number" step="0.1"  inputmode="decimal" placeholder="opt."></div>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;margin:0 13px">
+    <button onclick="ciSkip('growth')" class="mb cancel" style="flex:1">Not measured</button>
+    <button onclick="ciGrowthNext()" class="mb primary" style="flex:2">Next →</button>
+  </div>`;
+}
+
+function buildCISafety(q) {
+  const status = data.safetyStatus || {};
+  const t = today();
+  let next = SAFETY_ITEMS[0], maxDays = -1;
+  for (const item of SAFETY_ITEMS) {
+    const last = status[item.key];
+    const days = last ? Math.floor((new Date(t) - new Date(last)) / 86400000) : 999;
+    if (days > maxDays) { maxDays = days; next = item; }
+  }
+  return `<div class="card" style="margin-bottom:10px">
+    <div style="font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--yellow);font-weight:700;margin-bottom:8px">Safety Check</div>
+    <div style="font-size:17px;font-weight:700;margin-bottom:6px">${esc(next.q)}</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:14px">${status[next.key]?'Last confirmed: '+status[next.key]:'Not yet confirmed'}</div>
+    <div style="display:flex;gap:8px">
+      <button onclick="ciSafetyAnswer('${next.key}',true)"  style="flex:1;padding:14px;border-radius:var(--rs);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;border:1.5px solid rgba(63,185,80,.3);background:rgba(63,185,80,.08);color:var(--text)">✓ Yes, sorted</button>
+      <button onclick="ciSafetyAnswer('${next.key}',false)" style="flex:1;padding:14px;border-radius:var(--rs);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;border:1.5px solid rgba(248,81,73,.3);background:rgba(248,81,73,.08);color:var(--red)">Need to fix</button>
+    </div>
+  </div>${ciSkipBtn('safety')}`;
+}
+
+// ─── Answer handlers ─────────────────────────────────────────────────────────
+
+function ciSelectAnswer(id, field, val) {
+  if (!checkinState) return;
+  checkinState.wellbeing[field] = val;
+  checkinState.answeredKeys.push(id);
+  ciAdvance();
+}
+
+function ciScreenPick(val) {
+  if (!checkinState) return;
+  checkinState._screenVal = val;
+  renderView();
+}
+
+function ciReadPick(val) {
+  if (!checkinState) return;
+  checkinState._readVal = val;
+  renderView();
+}
+
+function ciScreenReadNext() {
+  if (!checkinState) return;
+  if (checkinState._screenVal != null) checkinState.wellbeing.screenBand  = checkinState._screenVal;
+  if (checkinState._readVal   != null) checkinState.wellbeing.readTogether = checkinState._readVal;
+  checkinState.answeredKeys.push('screen_read');
+  ciAdvance();
+}
+
+function ciAddWord() {
+  if (!checkinState) return;
+  const word = (document.getElementById('ci-word')?.value || '').trim();
+  if (!word) return;
+  const meaning  = (document.getElementById('ci-meaning')?.value || '').trim();
+  const language = document.getElementById('ci-lang')?.value || 'Filipino';
+  if (checkinState.newWords.some(w => w.word.toLowerCase() === word.toLowerCase())) { toast('Already added.'); return; }
+  checkinState.newWords.push({ id:uid(), word, meaning, language, firstHeard:today() });
+  renderView();
+}
+
+function ciRemoveWord(wid) {
+  if (!checkinState) return;
+  checkinState.newWords = checkinState.newWords.filter(w => w.id !== wid);
+  renderView();
+}
+
+function ciWordsNext() {
+  if (!checkinState) return;
+  checkinState.answeredKeys.push('words');
+  ciAdvance();
+}
+
+function ciBoolAnswer(id, field, val) {
+  if (!checkinState) return;
+  checkinState.wellbeing[field] = val;
+  checkinState.answeredKeys.push(id);
+  ciAdvance();
+}
+
+function ciMilestoneAnswer(id, status) {
+  if (!checkinState) return;
+  const ci = _ciMS[id];
+  if (!ci) return;
+  checkinState.newMilestones.push({ item:ci.item, domain:ci.domain, status });
+  checkinState.answeredKeys.push(id);
+  ciAdvance();
+}
+
+function ciGrowthNext() {
+  if (!checkinState) return;
+  const wt = parseFloat(document.getElementById('ci-wt')?.value);
+  const ht = parseFloat(document.getElementById('ci-ht')?.value);
+  const hd = parseFloat(document.getElementById('ci-hd')?.value);
+  if (wt || ht || hd) {
+    checkinState.growthEntry = { id:uid(), date:today(), ageMonths:ageMonths(data.child?.dob||MIO_DOB), weightKg:wt||null, heightCm:ht||null, headCm:hd||null, note:'Daily check-in' };
+  }
+  checkinState.answeredKeys.push('growth');
+  ciAdvance();
+}
+
+function ciSafetyAnswer(key, confirmed) {
+  if (!checkinState) return;
+  if (!data.safetyStatus) data.safetyStatus = {};
+  if (confirmed) data.safetyStatus[key] = today();
+  else toast('📋 Noted — worth sorting soon!');
+  checkinState.answeredKeys.push('safety');
+  ciAdvance();
+}
+
+function ciSkip(id) {
+  if (!checkinState) return;
+  checkinState.skippedKeys.push(id);
+  ciAdvance();
+}
+
+function ciAdvance() {
+  if (!checkinState) return;
+  checkinState.step++;
+  if (checkinState.step >= checkinState.questions.length) finishCheckin();
+  else renderView();
+}
+
+async function finishCheckin() {
+  if (!checkinState) return;
+  const t = today();
+  const wb = checkinState.wellbeing;
+  const hasWB = wb.sleepBand || wb.appetite || wb.mood || wb.activeBand || wb.screenBand != null || wb.readTogether != null || wb.twoWordCombos != null;
+  if (hasWB) {
+    if (!data.wellbeing) data.wellbeing = [];
+    const ex = data.wellbeing.find(w => w.date === t);
+    if (ex) Object.assign(ex, wb);
+    else data.wellbeing.push(wb);
+  }
+  for (const w of checkinState.newWords) {
+    if (!data.words) data.words = [];
+    if (!data.words.some(x => x.word.toLowerCase() === w.word.toLowerCase())) data.words.push(w);
+  }
+  for (const ms of checkinState.newMilestones) {
+    if (!data.milestones) data.milestones = [];
+    const ex = data.milestones.find(m => m.item === ms.item);
+    if (ex) { ex.status = ms.status; ex.date = t; }
+    else data.milestones.push({ id:uid(), date:t, ageMonths:ageMonths(data.child?.dob||MIO_DOB), domain:ms.domain, item:ms.item, status:ms.status, note:'' });
+  }
+  if (checkinState.growthEntry) {
+    if (!data.growth) data.growth = [];
+    data.growth.push(checkinState.growthEntry);
+  }
+  if (!data.checkinLog) data.checkinLog = [];
+  const exLog = data.checkinLog.find(l => l.date === t);
+  if (exLog) { exLog.answeredKeys.push(...checkinState.answeredKeys); exLog.skippedKeys.push(...checkinState.skippedKeys); }
+  else data.checkinLog.push({ date:t, answeredKeys:checkinState.answeredKeys, skippedKeys:checkinState.skippedKeys });
+  if (!data.settings) data.settings = {};
+  data.settings.checkinDoneDate = t;
+  checkinState = null;
+  await save();
+  renderView(); updateHdr();
+  toast('✅ Check-in saved!');
+}
+
+async function homeAddWord() {
+  const word = (document.getElementById('home-word')?.value || '').trim();
+  if (!word) return;
+  const meaning  = (document.getElementById('home-meaning')?.value || '').trim();
+  const language = document.getElementById('home-lang')?.value || 'Filipino';
+  if (!data.words) data.words = [];
+  if (data.words.some(w => w.word.toLowerCase() === word.toLowerCase())) { toast('Already in the list.'); return; }
+  data.words.push({ id:uid(), word, meaning, language, firstHeard:today() });
+  await save();
+  renderView();
+  toast(`Added "${word}"!`);
+}
+
 // ═══ MILESTONES VIEW ══════════════════════════════════════════════════════
 function buildMilestones() {
+  const DLABELS = { language:'Language', cognitive:'Cognitive', social_emotional:'Social & Emotional', motor_gross:'Gross Motor', motor_fine:'Fine Motor', adaptive:'Self-Help' };
+  const DICONS  = { language:'🗣', cognitive:'🧠', social_emotional:'❤️', motor_gross:'🏃', motor_fine:'✋', adaptive:'🍽' };
+  const domains = ['language','cognitive','social_emotional','motor_gross','motor_fine','adaptive'];
+
+  const reached = CDC_ITEMS.filter(ci => (data.milestones||[]).find(m => m.item === ci.item)?.status === 'reached').length;
+  const total   = CDC_ITEMS.length;
+  const pct     = Math.round((reached / total) * 100);
+
+  function statusChip(status) {
+    if (status === 'reached')    return `<span style="padding:3px 9px;border-radius:20px;font-size:10px;font-weight:700;background:rgba(63,185,80,.15);color:var(--green);border:1px solid rgba(63,185,80,.3);white-space:nowrap;flex-shrink:0">✓ Yes</span>`;
+    if (status === 'attempting') return `<span style="padding:3px 9px;border-radius:20px;font-size:10px;font-weight:700;background:rgba(227,179,65,.15);color:var(--yellow);border:1px solid rgba(227,179,65,.3);white-space:nowrap;flex-shrink:0">~ Trying</span>`;
+    if (status === 'not-yet')    return `<span style="padding:3px 9px;border-radius:20px;font-size:10px;font-weight:700;background:var(--surface2);color:var(--muted);border:1px solid var(--border);white-space:nowrap;flex-shrink:0">Not yet</span>`;
+    return `<span style="padding:3px 9px;border-radius:20px;font-size:10px;font-weight:700;background:var(--surface2);color:var(--border);border:1px solid var(--border);white-space:nowrap;flex-shrink:0">—</span>`;
+  }
+
+  const domainSections = domains.map(domain => {
+    const items = CDC_ITEMS.filter(x => x.domain === domain);
+    const dReached = items.filter(ci => (data.milestones||[]).find(m => m.item === ci.item)?.status === 'reached').length;
+    const speechPin = domain === 'language'
+      ? `<span style="font-size:10px;background:rgba(88,166,255,.15);color:var(--blue);border:1px solid rgba(88,166,255,.3);padding:2px 7px;border-radius:10px;font-weight:700;margin-left:7px">📍 Focus</span>`
+      : '';
+    return `
+      <div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:0 2px;margin:14px 0 8px">
+          <div style="font-size:12px;font-weight:700;color:var(--accent-l)">${DICONS[domain]} ${DLABELS[domain]}${speechPin}</div>
+          <div style="font-size:11px;color:var(--muted)">${dReached}/${items.length}</div>
+        </div>
+        ${items.map(ci => {
+          const idx = CDC_ITEMS.indexOf(ci);
+          const ms  = (data.milestones||[]).find(m => m.item === ci.item);
+          return `<div onclick="openMsModal(${idx})" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--rs);padding:11px 13px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer">
+            <div style="font-size:13px;font-weight:600;line-height:1.4;flex:1">${esc(ci.item)}</div>
+            ${statusChip(ms?.status)}
+          </div>`;
+        }).join('')}
+      </div>`;
+  }).join('');
+
   return `
-    <div class="empty" style="padding-top:60px">
-      <div class="empty-ico">📋</div>
-      <div class="empty-txt">Milestones</div>
-      <div class="empty-sub">Five-domain CDC checklists — Phase 4</div>
-    </div>
-    <div style="margin:0 13px">
-      <div class="card">
-        <div class="card-title">Coming in Phase 4</div>
-        <div style="font-size:13px;color:var(--muted);line-height:1.7">
-          Motor · Cognitive · Language · Social-Emotional · Adaptive<br>
-          Speech is pinned as the current focus. Milestone spotlights from the daily check-in will populate this view automatically.
+    <div style="padding:12px 13px 0">
+      <div class="card" style="margin-bottom:4px">
+        <div class="card-title">CDC 18-Month Checklist</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div><span style="font-size:26px;font-weight:800;color:var(--accent-l)">${reached}</span><span style="font-size:13px;color:var(--muted)"> / ${total} reached</span></div>
+          <div style="font-size:11px;color:var(--muted)">Tap any item to update</div>
+        </div>
+        <div style="height:6px;border-radius:3px;background:var(--border);overflow:hidden">
+          <div style="height:100%;width:${pct}%;background:var(--accent);border-radius:3px"></div>
         </div>
       </div>
+      ${domainSections}
     </div>
+    <div class="gap"></div>
   `;
+}
+
+function openMsModal(itemIdx) {
+  _msEditItem = CDC_ITEMS[itemIdx];
+  if (!_msEditItem) return;
+  const ms  = (data.milestones||[]).find(m => m.item === _msEditItem.item);
+  const cur = ms?.status;
+  const MS_OPTS = [
+    { status:'reached',    label:'✓ Reached', color:'var(--green)',  bg:'rgba(63,185,80,.15)',  border:'rgba(63,185,80,.4)'  },
+    { status:'attempting', label:'~ Trying',  color:'var(--yellow)', bg:'rgba(227,179,65,.15)', border:'rgba(227,179,65,.4)' },
+    { status:'not-yet',    label:'✗ Not yet', color:'var(--muted)',  bg:'rgba(125,133,144,.1)', border:'var(--border)'       },
+  ];
+  const btns = MS_OPTS.map(o => {
+    const on = cur === o.status;
+    return `<button onclick="saveMsStatus('${o.status}')"
+      style="width:100%;padding:13px;border-radius:var(--rs);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:8px;
+        border:1.5px solid ${on?o.border:'var(--border)'};background:${on?o.bg:'var(--surface2)'};color:${on?o.color:'var(--text)'}">${o.label}</button>`;
+  }).join('');
+  openModal(`
+    <div class="mdh"></div>
+    <div class="mdt">Update Milestone</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:18px;line-height:1.5">${esc(_msEditItem.item)}</div>
+    ${btns}
+    <button onclick="closeModal()" style="width:100%;padding:12px;border-radius:var(--rs);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;background:none;border:1px solid var(--border);color:var(--muted);margin-top:2px">Cancel</button>
+  `);
+}
+
+async function saveMsStatus(status) {
+  if (!_msEditItem) return;
+  const ci = _msEditItem;
+  if (!data.milestones) data.milestones = [];
+  const ex = data.milestones.find(m => m.item === ci.item);
+  if (ex) { ex.status = status; ex.date = today(); ex.ageMonths = ageMonths(data.child?.dob||MIO_DOB); }
+  else data.milestones.push({ id:uid(), date:today(), ageMonths:ageMonths(data.child?.dob||MIO_DOB), domain:ci.domain, item:ci.item, status, note:'' });
+  await save();
+  closeModal();
+  renderView();
+  toast('Milestone updated.');
 }
 
 // ═══ GROWTH VIEW ══════════════════════════════════════════════════════════
 function buildGrowth() {
-  return `
-    <div class="empty" style="padding-top:60px">
-      <div class="empty-ico">📈</div>
-      <div class="empty-txt">Growth</div>
-      <div class="empty-sub">WHO percentile curves — Phase 5</div>
-    </div>
-    <div style="margin:0 13px">
-      <div class="card">
-        <div class="card-title">Coming in Phase 5</div>
-        <div style="font-size:13px;color:var(--muted);line-height:1.7">
-          Weight · Height · Head circumference plotted against WHO boys' percentile bands.
-          Flags 2+ band crossings for the pediatrician — never interprets them.
-          Metric (kg, cm) throughout.
+  const growthData = (data.growth || []).slice().sort((a,b) => a.date.localeCompare(b.date));
+  const dob = data.child?.dob || MIO_DOB;
+
+  function metricCard(label, field, table, unit, tableNote) {
+    const entries = growthData.filter(g => g[field] != null);
+    if (!entries.length) return '';
+    const last     = entries[entries.length-1];
+    const band     = getBandInfo(last.ageMonths, last[field], table);
+    const crossing = checkBandCrossing(growthData, field, table);
+    return `
+      <div class="card" style="margin-bottom:10px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px">
+          <div>
+            <div class="card-title" style="margin-bottom:3px">${label}</div>
+            <div style="font-size:24px;font-weight:800">${last[field]} <span style="font-size:12px;font-weight:400;color:var(--muted)">${unit}</span></div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">${last.date} · ${last.ageMonths}mo</div>
+          </div>
+          ${band ? `<div style="text-align:right;padding-top:2px">
+            <div style="font-size:10px;color:var(--muted);margin-bottom:3px">WHO band</div>
+            <div style="font-size:15px;font-weight:800;color:${band.color}">${band.band}</div>
+          </div>` : ''}
         </div>
+        ${crossing ? `<div style="background:rgba(248,81,73,.1);border:1px solid rgba(248,81,73,.3);border-radius:var(--rs);padding:9px 11px;margin-bottom:10px;font-size:12px;color:#ffa198;line-height:1.5">
+          ⚠️ Crossed 2+ percentile bands (${esc(crossing.from)} → ${esc(crossing.to)}). Worth mentioning to the pediatrician — don't interpret on its own.
+        </div>` : ''}
+        ${tableNote ? `<div style="font-size:11px;color:var(--muted);margin-bottom:8px;font-style:italic">${tableNote}</div>` : ''}
+        ${buildWhoChart(growthData, field, table, unit)}
+        ${entries.length > 1 ? `
+        <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:8px">
+          ${entries.slice().reverse().slice(0,5).map(g => `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;font-size:12px">
+              <span style="color:var(--muted)">${g.date} <span style="font-size:10px">(${g.ageMonths}mo)</span></span>
+              <div style="display:flex;align-items:center;gap:6px">
+                <span style="font-weight:700">${g[field]} ${unit}</span>
+                <button onclick="confirmDeleteGrowth('${g.id}')" style="background:none;border:none;color:rgba(248,81,73,.45);cursor:pointer;font-size:16px;padding:0;line-height:1">×</button>
+              </div>
+            </div>`).join('')}
+        </div>` : ''}
+      </div>`;
+  }
+
+  const hasData = growthData.length > 0;
+
+  return `
+    <div style="padding:12px 13px 0">
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="font-size:13px;color:var(--muted)">${growthData.length} measurement${growthData.length!==1?'s':''} logged</div>
+        <button onclick="openGrowthModal()" style="background:var(--accent);color:#fff;border:none;border-radius:var(--rs);padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">+ Add</button>
       </div>
+
+      ${!hasData ? `
+      <div class="card" style="text-align:center;padding:28px 16px;margin-bottom:10px">
+        <div style="font-size:40px;margin-bottom:10px">📏</div>
+        <div style="font-size:16px;font-weight:700;margin-bottom:8px">No measurements yet</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:18px;line-height:1.6">Add weight, height, or head circumference. Plotted against WHO boys' percentile bands (P3 → P97).</div>
+        <button onclick="openGrowthModal()" style="background:var(--accent);color:#fff;border:none;border-radius:var(--rs);padding:12px 24px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Add first measurement</button>
+      </div>` : `
+      ${metricCard('Weight','weightKg',WHO_WT_B,'kg',null)}
+      ${metricCard('Length / Height','heightCm',WHO_LN_B,'cm', ageMonths(dob) < 24 ? 'Recumbent length reference (WHO, 0–24mo)' : null)}
+      ${metricCard('Head Circumference','headCm',WHO_HC_B,'cm',null)}
+      `}
+
+      <div style="margin-bottom:14px;padding:10px 12px;background:rgba(88,166,255,.07);border:1px solid rgba(88,166,255,.15);border-radius:var(--rs);font-size:11px;color:rgba(88,166,255,.8);line-height:1.6">
+        ℹ️ Percentile bands from WHO Child Growth Standards (2006), boys. Reference values only — not for clinical decisions. Share with Mio's pediatrician for interpretation.
+      </div>
+
     </div>
+    <div class="gap"></div>
   `;
+}
+
+function openGrowthModal() {
+  openModal(`
+    <div class="mdh"></div>
+    <div class="mdt">Add Measurement</div>
+    <div class="mf">
+      <div class="ml">Date</div>
+      <input class="mi" id="gDate" type="date" value="${today()}">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">
+      <div><div class="ml">Weight (kg)</div><input class="mi" id="gWt" type="number" step="0.01" inputmode="decimal" placeholder="e.g. 11.2"></div>
+      <div><div class="ml">Height (cm)</div><input class="mi" id="gHt" type="number" step="0.1"  inputmode="decimal" placeholder="e.g. 84"></div>
+      <div><div class="ml">Head (cm)</div><input class="mi"  id="gHd" type="number" step="0.1"  inputmode="decimal" placeholder="e.g. 47"></div>
+    </div>
+    <div class="mf">
+      <div class="ml">Note (optional)</div>
+      <input class="mi" id="gNote" placeholder="e.g. well-child visit">
+    </div>
+    <div class="ma">
+      <button onclick="closeModal()" class="mb cancel">Cancel</button>
+      <button onclick="saveGrowthEntry()" class="mb primary">Save</button>
+    </div>
+  `);
+}
+
+async function saveGrowthEntry() {
+  const dateVal = document.getElementById('gDate')?.value || today();
+  const wt   = parseFloat(document.getElementById('gWt')?.value);
+  const ht   = parseFloat(document.getElementById('gHt')?.value);
+  const hd   = parseFloat(document.getElementById('gHd')?.value);
+  const note = (document.getElementById('gNote')?.value || '').trim();
+  if (!wt && !ht && !hd) { toast('Enter at least one measurement.'); return; }
+  const mo = ageMonthsAt(data.child?.dob || MIO_DOB, dateVal);
+  if (!data.growth) data.growth = [];
+  data.growth.push({ id:uid(), date:dateVal, ageMonths:mo, weightKg:wt||null, heightCm:ht||null, headCm:hd||null, note });
+  await save();
+  closeModal();
+  renderView();
+  toast('Measurement saved.');
+}
+
+function confirmDeleteGrowth(id) {
+  openModal(`
+    <div class="mdh"></div>
+    <div class="mdt">Delete this entry?</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:20px">This can't be undone.</div>
+    <div class="ma">
+      <button onclick="closeModal()" class="mb cancel">Keep it</button>
+      <button onclick="deleteGrowthEntry('${id}')" class="mb danger">Delete</button>
+    </div>
+  `);
+}
+
+async function deleteGrowthEntry(id) {
+  data.growth = (data.growth||[]).filter(g => g.id !== id);
+  await save();
+  closeModal();
+  renderView();
+  toast('Entry deleted.');
 }
 
 // ═══ TRENDS VIEW ══════════════════════════════════════════════════════════
 function buildTrends() {
+  const words     = (data.words || []).slice().sort((a,b) => (b.firstHeard||'').localeCompare(a.firstHeard||''));
+  const wellbeing = (data.wellbeing || []).slice().sort((a,b) => a.date.localeCompare(b.date));
+
+  // Last 14 calendar days
+  const DAYS = Array.from({length:14}, (_,i) => {
+    const d = new Date(); d.setDate(d.getDate() - (13 - i));
+    return d.toISOString().slice(0,10);
+  });
+  const wbByDate = {};
+  for (const wb of wellbeing) wbByDate[wb.date] = wb;
+  const checkinDone = DAYS.filter(d => wbByDate[d]).length;
+
+  // Language breakdown
+  const byLang = {};
+  for (const w of data.words||[]) byLang[w.language||'Other'] = (byLang[w.language||'Other']||0)+1;
+  const langStr = Object.entries(byLang).map(([l,c]) => `${c} ${l}`).join(' · ') || '—';
+
+  // Color + height maps
+  const SLEEP_C  = { lt9:'var(--red)', '9to11':'var(--yellow)', '11to14':'var(--green)', gt14:'var(--blue)' };
+  const SLEEP_H  = { lt9:8, '9to11':16, '11to14':32, gt14:24 };
+  const ACTIVE_C = { little:'var(--red)', '1h':'var(--yellow)', lots:'var(--green)', lots_out:'var(--accent-l)' };
+  const ACTIVE_H = { little:8, '1h':16, lots:28, lots_out:32 };
+  const MOOD_C   = { happy:'var(--green)', mixed:'var(--yellow)', fussy:'var(--red)' };
+
+  function barRow(label, valFn, cFn, hFn) {
+    const bars = DAYS.map(d => {
+      const wb = wbByDate[d]; const v = wb ? valFn(wb) : null;
+      return `<div style="flex:1;border-radius:2px 2px 0 0;height:${v ? hFn(v) : 3}px;background:${v ? cFn(v) : 'var(--border)'};align-self:flex-end"></div>`;
+    }).join('');
+    return `<div style="margin-bottom:12px">
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-weight:700;margin-bottom:5px">${label}</div>
+      <div style="display:flex;gap:2px;align-items:flex-end;height:34px">${bars}</div>
+    </div>`;
+  }
+
+  function dotRow(label, colorFn) {
+    const dots = DAYS.map(d => {
+      const wb = wbByDate[d];
+      const c  = wb ? (colorFn(wb) || 'var(--border)') : 'var(--surface2)';
+      return `<div style="flex:1;height:10px;border-radius:2px;background:${c}"></div>`;
+    }).join('');
+    return `<div style="margin-bottom:12px">
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-weight:700;margin-bottom:5px">${label}</div>
+      <div style="display:flex;gap:2px;align-items:center">${dots}</div>
+    </div>`;
+  }
+
+  const dayLabelRow = `<div style="display:flex;gap:2px;margin-top:3px">
+    ${DAYS.map(d => {
+      const isToday = d === today();
+      const lbl = new Date(d+'T12:00:00').toLocaleDateString('en-US',{weekday:'narrow'});
+      return `<div style="flex:1;text-align:center;font-size:8px;color:${isToday?'var(--accent-l)':'var(--muted)'};font-weight:${isToday?700:400}">${lbl}</div>`;
+    }).join('')}
+  </div>`;
+
   return `
-    <div class="empty" style="padding-top:60px">
-      <div class="empty-ico">📅</div>
-      <div class="empty-txt">Trends</div>
-      <div class="empty-sub">Sleep, play, mood, words over time — Phase 4</div>
-    </div>
-    <div style="margin:0 13px">
-      <div class="card">
-        <div class="card-title">Coming in Phase 4</div>
-        <div style="font-size:13px;color:var(--muted);line-height:1.7">
-          Charts from daily check-in history: sleep bands, active play, screen time,
-          reading consistency, mood, and the growing word count across both languages.
+    <div style="padding:12px 13px 0">
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+        <div class="scard">
+          <div class="s-lbl">Words</div>
+          <div class="s-val" style="color:var(--accent-l)">${words.length}</div>
+          <div class="s-sub">${langStr}</div>
+        </div>
+        <div class="scard">
+          <div class="s-lbl">Check-ins</div>
+          <div class="s-val" style="color:var(--blue)">${checkinDone}<span style="font-size:11px;font-weight:400;color:var(--muted)">/14</span></div>
+          <div class="s-sub">last 14 days</div>
         </div>
       </div>
+
+      ${words.length ? `
+      <div class="card" style="margin-bottom:10px">
+        <div class="card-title">Word list · all languages</div>
+        <div style="max-height:200px;overflow-y:auto">
+          ${words.map(w => `<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border)">
+            <div><span style="font-weight:700">${esc(w.word)}</span>${w.meaning ? `<span style="font-size:12px;color:var(--muted)"> · ${esc(w.meaning)}</span>` : ''}</div>
+            <span style="font-size:11px;color:var(--accent-l);flex-shrink:0;margin-left:8px">${esc(w.language||'')}</span>
+          </div>`).join('')}
+        </div>
+      </div>` : `
+      <div class="card" style="margin-bottom:10px">
+        <div class="card-title">Word list</div>
+        <div style="font-size:13px;color:var(--muted)">No words logged yet. Add them in Home or via the daily check-in.</div>
+      </div>`}
+
+      <div class="card" style="margin-bottom:10px">
+        <div class="card-title">Last 14 days · ${checkinDone} check-in${checkinDone!==1?'s':''} logged</div>
+        ${checkinDone === 0
+          ? `<div style="text-align:center;padding:18px 0 10px">
+              <div style="font-size:28px;margin-bottom:8px">📅</div>
+              <div style="font-size:14px;font-weight:700;margin-bottom:5px">No check-ins yet</div>
+              <div style="font-size:12px;color:var(--muted);line-height:1.6">The daily check-in fills these bars automatically. Open the app each day and tap through the quick prompts.</div>
+            </div>`
+          : `${barRow('Sleep · 🟢 11–14h target', wb=>wb.sleepBand, v=>SLEEP_C[v]||'var(--border)', v=>SLEEP_H[v]||6)}
+        ${dayLabelRow}
+        <div style="height:10px"></div>
+        ${barRow('Active play · 🟢 lots', wb=>wb.activeBand, v=>ACTIVE_C[v]||'var(--border)', v=>ACTIVE_H[v]||6)}
+        ${dotRow('Mood · 🟢 happy 🟡 mixed 🔴 fussy', wb=>wb.mood ? MOOD_C[wb.mood] : null)}
+        ${dotRow('Read together · 🟢 yes', wb=>wb.readTogether === true ? 'var(--green)' : wb.readTogether === false ? 'rgba(125,133,144,.2)' : null)}`}
+      </div>
+
     </div>
+    <div class="gap"></div>
   `;
 }
 
 // ═══ ADVISOR VIEW ═════════════════════════════════════════════════════════
+function buildAdvisorSystemPrompt() {
+  const dob  = data.child?.dob || MIO_DOB;
+  const mo   = ageMonths(dob);
+  const y    = Math.floor(mo/12), rem = mo % 12;
+  const ageL = y > 0 ? `${y}y ${rem}mo` : `${mo} months`;
+  const words = data.words || [];
+  const wc    = words.length;
+  const wSamp = words.slice(0,8).map(w => `"${w.word}"${w.meaning?' ('+w.meaning+')':''}`).join(', ');
+  const ms    = data.milestones || [];
+  const rea   = ms.filter(m=>m.status==='reached').map(m=>m.item).join('; ')||'none logged';
+  const try_  = ms.filter(m=>m.status==='attempting').map(m=>m.item).join('; ')||'none';
+  const nyt   = ms.filter(m=>m.status==='not-yet').map(m=>m.item).join('; ')||'none';
+  const wb7   = (data.wellbeing||[]).filter(w=>w.date>=sevenDaysAgo());
+  const SLEEP_L={lt9:'<9h','9to11':'9–11h','11to14':'11–14h',gt14:'>14h'};
+  const ACT_L  ={little:'little','1h':'~1h',lots:'lots',lots_out:'lots+outdoors'};
+  const MOOD_L ={happy:'happy',mixed:'mixed',fussy:'fussy'};
+  const wbSum = wb7.length===0 ? 'No recent check-ins.' :
+    `${wb7.length} check-ins (last 7d). Sleep: ${summarizeBands(wb7,'sleepBand',SLEEP_L)}. Mood: ${summarizeBands(wb7,'mood',MOOD_L)}. Active: ${summarizeBands(wb7,'activeBand',ACT_L)}.`;
+  const lg    = (data.growth||[]).sort((a,b)=>b.date.localeCompare(a.date))[0];
+  const gwth  = lg
+    ? `${lg.date} (${lg.ageMonths}mo): ${[lg.weightKg&&lg.weightKg+'kg',lg.heightCm&&lg.heightCm+'cm',lg.headCm&&'HC '+lg.headCm+'cm'].filter(Boolean).join(', ')}`
+    : 'None logged.';
+  const langs = (data.child?.languages||['Filipino','English']).join(' + ');
+
+  return `You are a warm, honest development companion for Mio's parents. You draw on CDC, AAP/HealthyChildren, WHO, ASHA, and the Nurturing Care Framework.
+
+HARD RULES — never break these:
+• Never diagnose. Never predict outcomes. You are not a doctor.
+• Route any clinical concern to Mio's pediatrician. End clinical answers with: "Worth raising with Mio's pediatrician."
+• Cite sources (CDC, AAP, WHO, ASHA) for developmental claims. Label uncited statements as general knowledge.
+• Be honest: never falsely reassure, never alarm without basis. State where Mio sits AND note the wide normal variation.
+• On speech: always note that strong comprehension is a positive sign — receptive language is one of the best predictors of expressive outcomes (ASHA).
+
+MIO RIGHT NOW — ${ageL} old, born ${dob}:
+Words: ${wc} across all languages${wc>0?' — '+wSamp+(wc>8?' + more':''):''}
+Milestones reached: ${rea}
+Trying: ${try_}
+Not yet: ${nyt}
+Recent wellbeing: ${wbSum}
+Latest growth: ${gwth}
+Languages at home: ${langs}
+
+KNOWLEDGE AREAS:
+Speech/language: CDC/ASHA milestones, bilingual counts (all languages combined), expressive vs. receptive, serve-and-return, language-rich routines, reading aloud
+Cognitive: object permanence, imitation, cause-effect, pretend play
+Social-emotional: attachment, emotional regulation, parallel play, temperament
+Motor: gross (walking/running/climbing), fine (grasping/stacking/scribbling)
+Adaptive: feeding independence, cup drinking, sleep routines
+Growth: WHO P3–P97 bands; flag 2+ crossings for pediatrician — never interpret
+Wellbeing: sleep target 11–14h, active play ~3h, screen time, reading
+Positive parenting: responsive caregiving, narrating daily life, reducing screens
+
+Keep answers focused and parent-friendly. Activities should be concrete and daily-doable.`;
+}
+
 function buildAdvisor() {
-  return `
+  const proxyUrl = (data.settings?.proxyUrl || '').trim();
+
+  if (!proxyUrl) return `
     <div class="empty" style="padding-top:60px">
       <div class="empty-ico">💬</div>
       <div class="empty-txt">AI Advisor</div>
-      <div class="empty-sub">Knowledge-base grounded chat — Phase 7</div>
+      <div class="empty-sub">Set your Claude Proxy URL in Settings first.</div>
     </div>
     <div style="margin:0 13px">
       <div class="card">
-        <div class="card-title">Coming in Phase 7</div>
-        <div style="font-size:13px;color:var(--muted);line-height:1.7">
-          Chat powered by the Mio Tracker knowledge base (CDC, AAP, WHO, ASHA).
-          Seeded with Mio's live data — age, recent check-ins, milestone status, growth.
-          Always routes clinical questions to the pediatrician. Never diagnoses.
-        </div>
+        <div class="card-title">How to enable</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:14px">Go to ⚙️ Settings → AI Advisor and paste in your Cloudflare Worker proxy URL.</div>
+        <button onclick="sv('settings')" style="width:100%;padding:11px;background:var(--accent);color:#fff;border:none;border-radius:var(--rs);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Open Settings →</button>
       </div>
+    </div>`;
+
+  const STARTERS = [
+    "What can we do to help Mio say more words?",
+    "What milestones should Mio be hitting right now?",
+    "How much sleep does a baby Mio's age need?",
+    "What daily activities support speech at this age?",
+  ];
+
+  const bubbles = advisorMsgs.length === 0
+    ? `<div style="text-align:center;padding:20px 0 16px">
+        <div style="font-size:32px;margin-bottom:8px">💬</div>
+        <div style="font-size:15px;font-weight:700;margin-bottom:5px">Ask me anything about Mio</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:16px">I know his age, words, milestones, and recent check-ins.</div>
+        ${STARTERS.map(s=>`<button onclick="useAdvisorStarter(${JSON.stringify(s)})" style="display:block;width:100%;text-align:left;background:var(--surface2);border:1px solid var(--border);border-radius:var(--rs);padding:10px 12px;margin-bottom:7px;color:var(--text);font-size:13px;cursor:pointer;font-family:inherit">${esc(s)}</button>`).join('')}
+      </div>`
+    : advisorMsgs.map(m => {
+        const isUser = m.role === 'user';
+        return `<div style="display:flex;justify-content:${isUser?'flex-end':'flex-start'};margin-bottom:6px">
+          <div style="max-width:86%;padding:10px 13px;
+            border-radius:${isUser?'16px 16px 4px 16px':'16px 16px 16px 4px'};
+            background:${isUser?'var(--accent)':'var(--surface2)'};
+            color:${isUser?'#fff':'var(--text)'};
+            font-size:14px;line-height:1.5;word-break:break-word;
+            border:${isUser?'none':'1px solid var(--border)'}">${isUser?esc(m.content):renderMD(m.content)}</div>
+        </div>`;
+      }).join('') +
+    (advisorBusy
+      ? `<div style="display:flex;justify-content:flex-start;margin-bottom:6px">
+          <div style="padding:11px 15px;border-radius:16px 16px 16px 4px;background:var(--surface2);border:1px solid var(--border)">
+            <div style="display:flex;gap:5px;align-items:center;height:14px">
+              <div style="width:7px;height:7px;border-radius:50%;background:var(--muted);animation:adot .9s ease infinite"></div>
+              <div style="width:7px;height:7px;border-radius:50%;background:var(--muted);animation:adot .9s ease infinite .15s"></div>
+              <div style="width:7px;height:7px;border-radius:50%;background:var(--muted);animation:adot .9s ease infinite .3s"></div>
+            </div>
+          </div>
+        </div>`
+      : '');
+
+  const clearBtn = advisorMsgs.length > 0
+    ? `<button onclick="clearAdvisorChat()" style="background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;font-family:inherit">Clear</button>`
+    : '';
+
+  return `
+    <div style="padding:10px 13px 2px;display:flex;align-items:center;justify-content:space-between">
+      <div style="font-size:11px;color:var(--muted)">Knows Mio's age, words, milestones + check-ins</div>
+      ${clearBtn}
     </div>
-  `;
+    <div id="chat-msgs" style="padding:6px 13px 80px">
+      ${bubbles}
+    </div>
+    <div style="position:fixed;bottom:var(--nav-h);left:50%;transform:translateX(-50%);width:100%;max-width:430px;background:var(--surface);border-top:1px solid var(--border);padding:8px 13px;z-index:99">
+      <div style="display:flex;gap:8px;align-items:flex-end">
+        <textarea id="chat-inp" placeholder="Ask about Mio's development…"
+          style="flex:1;background:var(--surface2);border:1.5px solid var(--border);border-radius:12px;padding:9px 12px;color:var(--text);font-size:14px;font-family:inherit;outline:none;resize:none;line-height:1.4;min-height:40px;max-height:110px;overflow-y:auto"
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendAdvisorMsg()}"
+          oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,110)+'px'"></textarea>
+        <button onclick="sendAdvisorMsg()" ${advisorBusy?'disabled':''} style="background:${advisorBusy?'var(--border)':'var(--accent)'};color:#fff;border:none;border-radius:12px;padding:9px 14px;font-weight:700;cursor:${advisorBusy?'default':'pointer'};font-family:inherit;font-size:14px;flex-shrink:0;align-self:flex-end">Send</button>
+      </div>
+      <div style="font-size:10px;color:var(--muted);margin-top:5px;text-align:center">Not a doctor · clinical questions routed to the pediatrician</div>
+    </div>`;
+}
+
+function useAdvisorStarter(text) {
+  const inp = document.getElementById('chat-inp');
+  if (inp) { inp.value = text; inp.focus(); inp.style.height = 'auto'; inp.style.height = Math.min(inp.scrollHeight,110)+'px'; }
+}
+
+async function sendAdvisorMsg() {
+  if (advisorBusy) return;
+  const inp = document.getElementById('chat-inp');
+  const text = (inp?.value||'').trim();
+  if (!text) return;
+  const proxyUrl = (data.settings?.proxyUrl||'').trim();
+  if (!proxyUrl) { toast('Set the Claude Proxy URL in Settings.'); sv('settings'); return; }
+
+  advisorMsgs.push({ role:'user', content:text });
+  if (inp) { inp.value=''; inp.style.height='auto'; }
+  advisorBusy = true;
+  renderView();
+  scrollAdvisorToBottom();
+
+  try {
+    const res = await fetch(proxyUrl, {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json' },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1024,
+        system: buildAdvisorSystemPrompt(),
+        messages: advisorMsgs.map(m => ({ role:m.role, content:m.content }))
+      })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const r = await res.json();
+    const reply = r.content?.[0]?.text || r.choices?.[0]?.message?.content || '';
+    if (!reply) throw new Error('Empty response');
+    advisorMsgs.push({ role:'assistant', content:reply });
+  } catch(e) {
+    advisorMsgs.push({ role:'assistant', content:"⚠️ Couldn't reach the advisor. Check your Proxy URL in Settings and try again." });
+    console.warn('Advisor error:', e);
+  }
+  advisorBusy = false;
+  renderView();
+  scrollAdvisorToBottom();
+}
+
+function clearAdvisorChat() { advisorMsgs = []; renderView(); }
+
+function scrollAdvisorToBottom() {
+  setTimeout(() => { const c = document.getElementById('content'); if (c) c.scrollTop = c.scrollHeight; }, 80);
 }
 
 // ═══ SETTINGS VIEW ════════════════════════════════════════════════════════
@@ -858,7 +2091,9 @@ function buildSettings() {
   const name  = esc(data.child?.name || 'Mio');
   const langs = esc((data.child?.languages || []).join(', ') || 'Filipino, English');
   const proxy = esc(data.settings?.proxyUrl || '');
-  const driveStatus = gdriveToken ? '✅ Connected (sync in Phase 6)' : '⚠️ Not connected';
+  const driveStatus = gdriveToken
+    ? (_driveSyncFailed ? '⚠️ Connected — last sync failed' : '✅ Connected · syncing')
+    : '⚠️ Not connected';
   const driveBtnLabel = gdriveToken ? 'Disconnect' : 'Connect Google Drive';
   const driveBtnFn   = gdriveToken ? 'disconnectDrive()' : 'connectDrive()';
   const driveBtnCls  = gdriveToken ? 'danger' : 'ok';
@@ -885,7 +2120,21 @@ function buildSettings() {
     </div>
     <div style="margin:0 13px 10px;padding:10px 13px;background:rgba(88,166,255,.07);border:1px solid rgba(88,166,255,.2);border-radius:var(--rs);font-size:12px;color:var(--blue);line-height:1.5">
       ℹ️ Drive sync requires a <strong>shared Google account</strong> that both parents sign in with.
-      Both phones read and write the same data file. Full sync activates in Phase 6.
+      Both phones read and write the same data file — changes from either parent are merged automatically.
+    </div>
+
+    <div class="set-sec">Share with partner</div>
+    <div class="set-row" style="flex-direction:column;align-items:stretch;gap:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div class="set-lbl">Invite your partner</div>
+        <button class="set-btn" onclick="copyAppLink()">Copy link</button>
+      </div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.8">
+        <span style="color:var(--text);font-weight:700">1.</span> Send them this link — they open it in Safari or Chrome<br>
+        <span style="color:var(--text);font-weight:700">2.</span> Share button → <strong style="color:var(--text)">Add to Home Screen</strong><br>
+        <span style="color:var(--text);font-weight:700">3.</span> Sign in with the <strong style="color:var(--text)">same Google account</strong> used here<br>
+        <span style="color:var(--text);font-weight:700">4.</span> Data merges automatically — both phones stay in sync
+      </div>
     </div>
 
     <div class="set-sec">AI Advisor</div>
@@ -896,20 +2145,30 @@ function buildSettings() {
 
     <div class="set-sec">Data</div>
     <div class="set-row">
-      <div><div class="set-lbl">Export Backup</div><div class="set-sub">Download all data as JSON</div></div>
+      <div>
+        <div class="set-lbl">Export Backup</div>
+        <div class="set-sub">${(data.words||[]).length} words · ${(data.growth||[]).length} measurements · ${(data.wellbeing||[]).length} check-ins</div>
+      </div>
       <button class="set-btn" onclick="exportData()">Export</button>
     </div>
     <div class="set-row">
-      <div><div class="set-lbl">Import Backup</div><div class="set-sub">Restore from JSON file</div></div>
+      <div><div class="set-lbl">Restore from Backup</div><div class="set-sub">Import a JSON file exported from this app</div></div>
       <button class="set-btn" onclick="importData()">Import</button>
     </div>
 
     <div class="set-sec">About</div>
     <div class="set-row">
-      <div><div class="set-lbl">Mio Tracker</div><div class="set-sub">v${APP_VERSION} · Phase 1 — Scaffold</div></div>
+      <div><div class="set-lbl">Mio Tracker</div><div class="set-sub">v${APP_VERSION} · All phases complete ✓</div></div>
     </div>
     <div class="gap"></div>
   `;
+}
+
+function copyAppLink() {
+  navigator.clipboard.writeText(window.location.href).then(
+    () => toast('App link copied — share it with your partner!'),
+    () => { toast('Copy failed — share the URL manually.'); }
+  );
 }
 
 async function saveProxyUrl() {

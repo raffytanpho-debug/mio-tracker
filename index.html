@@ -11,7 +11,6 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Mio">
   <link rel="apple-touch-icon" href="apple-touch-icon-180.png">
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
     :root {
       --bg:#0d1117; --surface:#161b22; --surface2:#21262d; --border:#30363d;
@@ -126,12 +125,11 @@
 <script>
 // ═══ CONFIG ═══════════════════════════════════════════════════════════════
 const MIO_DOB = '2024-10-15';
-// Reusing the same Google Cloud project as Financial Tracker.
-// ⚠️ Before going live: add the Mio Tracker GitHub Pages URL to Authorized JavaScript
-// origins at console.cloud.google.com → APIs & Services → Credentials → OAuth client.
-const GDRIVE_CLIENT_ID = '428293773028-hdmpetjd007bahi6kmm4ku61j8gss3mf.apps.googleusercontent.com';
-const GDRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
-const APP_VERSION = '1.0.0';
+// Google Drive auth runs server-side through the shared Cloudflare Worker
+// (auth-code flow + refresh token in KV). The Worker holds the client_id/secret;
+// the app only ever holds an opaque session_id. See GOOGLE_DRIVE_AUTH_PLAYBOOK.md.
+const WORKER_BASE = 'https://claude-proxy.raffy-tanpho.workers.dev';
+const APP_VERSION = '1.1.0';
 const DRIVE_FILE_NAME = 'mio-tracker-data.json';
 
 // CDC 18-month milestone checklist (all five domains)
@@ -280,7 +278,8 @@ const DEF = {
 let data = clone(DEF);
 let view = 'home';
 let onboardStep = 0;
-let gdriveToken = null;
+let gdriveToken = null;     // in-memory Drive access token (re-minted from session)
+let gdriveSession = null;   // opaque session_id held by the client (the only credential)
 let gdriveFileId = null;
 let gdriveRefreshTimer = null;
 let _driveSync = false;        // lock: one sync at a time
@@ -535,71 +534,97 @@ async function loadData() {
 // ═══ LAUNCH ════════════════════════════════════════════════════════════════
 async function launchApp() {
   await loadData();
-  await tryRestoreAuth();
+  // Must await before first render: restores the Drive session and mints a fresh
+  // token so the reconnect banner doesn't flash when the connection is fine.
+  await tryRestoreFolder();
   // Pre-seed Mio's known words/milestones before first onboarding
   if (!data.settings?.onboardingDone && (data.words||[]).length === 0) {
     seedKnownData();
     await save();
   }
-  sv('home'); // render immediately for responsiveness
-  // Sync from Drive on open (non-blocking after initial render)
-  if (gdriveToken) {
-    if (!gdriveFileId) await findOrCreateDriveFile();
-    if (gdriveFileId) syncFromDrive(); // async, will re-render if remote has new data
-  }
+  sv('home'); // render after restore so the Drive banner reflects real state
 }
 
-// ═══ DRIVE AUTH (connect only — sync in Phase 6) ═══════════════════════
+// ═══ DRIVE AUTH (server-side auth-code flow via Cloudflare Worker) ══════════
+// The Worker holds the long-lived refresh token; the client holds only an opaque
+// session_id and asks the Worker for a fresh access token whenever it needs one.
+// This is durable on desktop and on the installed iOS PWA (no reliance on a
+// browser-held Google session). See GOOGLE_DRIVE_AUTH_PLAYBOOK.md.
+
 function scheduleTokenRefresh(expiresInMs) {
   if (gdriveRefreshTimer) clearTimeout(gdriveRefreshTimer);
   const refreshIn = Math.max(expiresInMs - 5 * 60 * 1000, 30000);
-  gdriveRefreshTimer = setTimeout(silentTokenRefresh, refreshIn);
+  gdriveRefreshTimer = setTimeout(() => { getDriveToken(); }, refreshIn);
 }
 
-function silentTokenRefresh() {
-  if (!window.google?.accounts?.oauth2) return;
-  const client = google.accounts.oauth2.initTokenClient({
-    client_id: GDRIVE_CLIENT_ID, scope: GDRIVE_SCOPE,
-    callback: async r => {
-      if (r.error || !r.access_token) return;
-      gdriveToken = r.access_token;
-      await dbSet('gdriveToken', r.access_token);
-      const expiry = Date.now() + ((r.expires_in || 3599) * 1000);
-      await dbSet('gdriveExpiry', expiry);
-      scheduleTokenRefresh((r.expires_in || 3599) * 1000);
+// Mint a fresh Drive access token from the stored session. Returns true on success.
+async function getDriveToken() {
+  if (!gdriveSession) gdriveSession = await dbGet('driveSession');
+  if (!gdriveSession) return false;
+  try {
+    const r = await fetch(WORKER_BASE + '/drive/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: gdriveSession })
+    });
+    if (!r.ok) {
+      // 401 = session is definitively dead; clear it so the reconnect banner shows.
+      // Any other status is treated as transient — keep the session and retry later.
+      if (r.status === 401) { gdriveSession = null; gdriveToken = null; await dbSet('driveSession', null); }
+      return false;
     }
-  });
-  client.requestAccessToken({ prompt: '' });
+    const j = await r.json();
+    if (!j.access_token) return false;
+    gdriveToken = j.access_token;
+    const ms = (j.expires_in || 3599) * 1000;
+    await dbSet('gdriveExpiry', Date.now() + ms);
+    scheduleTokenRefresh(ms);
+    return true;
+  } catch (e) { return false; }
 }
 
-async function connectDrive() {
-  if (!window.google?.accounts?.oauth2) { toast('Google sign-in not loaded yet — try refreshing.'); return; }
-  const client = google.accounts.oauth2.initTokenClient({
-    client_id: GDRIVE_CLIENT_ID, scope: GDRIVE_SCOPE,
-    callback: async r => {
-      if (r.error) { toast('Could not connect to Google Drive.'); return; }
-      gdriveToken = r.access_token;
-      await dbSet('gdriveToken', r.access_token);
-      const expiry = Date.now() + ((r.expires_in || 3599) * 1000);
-      await dbSet('gdriveExpiry', expiry);
-      scheduleTokenRefresh((r.expires_in || 3599) * 1000);
-      toast('☁️ Connected — finding Drive file…');
-      updateHdr();
-      if (view === 'settings') renderView();
-      await findOrCreateDriveFile();
-      await syncFromDrive();
-      toast('✅ Drive connected — data synced!');
-      updateHdr();
-      if (view === 'settings') renderView();
-    }
-  });
-  client.requestAccessToken({ prompt: '' });
+// Refresh on refocus / reconnect if the token is missing or near expiry.
+async function maybeRefreshToken() {
+  if (!gdriveSession && !(gdriveSession = await dbGet('driveSession'))) return;
+  const expiry = await dbGet('gdriveExpiry');
+  if (!gdriveToken || !expiry || Date.now() > expiry - 60000) {
+    const ok = await getDriveToken();
+    if (ok) await syncFromDrive();
+  }
+}
+
+// Start the consent flow. Full redirect (not a popup) so it works in the PWA.
+// ?app=mio tells the shared Worker to return the browser to Mio, not Finance Tracker.
+function connectDrive() {
+  toast('Redirecting to Google…');
+  location.href = WORKER_BASE + '/drive/start?app=mio';
+}
+
+// iOS fallback: the redirect can land in Safari instead of the installed PWA,
+// so the connect page also prints a setup code that can be pasted here.
+async function enterDriveCode() {
+  const c = (prompt('Paste the setup code shown on the connect page:') || '').trim();
+  if (!c) return;
+  gdriveSession = c;
+  await dbSet('driveSession', c);
+  const ok = await getDriveToken();
+  if (ok) {
+    if (!gdriveFileId) await findOrCreateDriveFile();
+    await syncFromDrive();
+    toast('✅ Connected to Google Drive!');
+  } else {
+    toast('That code did not work — tap Connect to try again.');
+  }
+  updateHdr();
+  if (view === 'settings') renderView();
 }
 
 async function disconnectDrive() {
   gdriveToken = null;
   gdriveFileId = null;
+  gdriveSession = null;
   if (gdriveRefreshTimer) clearTimeout(gdriveRefreshTimer);
+  await dbSet('driveSession', null);
   await dbSet('gdriveToken', null);
   await dbSet('gdriveExpiry', null);
   await dbSet('gdriveFileId', null);
@@ -608,15 +633,31 @@ async function disconnectDrive() {
   if (view === 'settings') renderView();
 }
 
-async function tryRestoreAuth() {
+// On load: capture #drive_session from the hash (fresh connect) or restore the
+// saved session, then mint a token and sync. Awaited before the first render.
+async function tryRestoreFolder() {
   try {
-    const token = await dbGet('gdriveToken');
-    const expiry = await dbGet('gdriveExpiry');
-    if (!token || !expiry) return;
-    if (Date.now() > expiry) { await dbSet('gdriveToken', null); return; }
-    gdriveToken = token;
+    const m = location.hash.match(/drive_session=([^&]+)/);
+    let fresh = false;
+    if (m) {
+      gdriveSession = decodeURIComponent(m[1]);
+      await dbSet('driveSession', gdriveSession);
+      history.replaceState(null, '', location.pathname + location.search);
+      fresh = true;
+    }
+    gdriveSession = gdriveSession || await dbGet('driveSession');
     gdriveFileId = await dbGet('gdriveFileId') || null;
-    scheduleTokenRefresh(expiry - Date.now());
+    if (!gdriveSession) return;
+    const ok = await getDriveToken();
+    if (ok) {
+      if (!gdriveFileId) await findOrCreateDriveFile();
+      await syncFromDrive();
+      if (fresh) {
+        toast('✅ Connected — data synced!');
+        updateHdr();
+        if (view === 'settings') renderView();
+      }
+    }
   } catch (e) {}
 }
 
@@ -2115,6 +2156,7 @@ function buildSettings() {
       <div>
         <div class="set-lbl">Google Drive</div>
         <div class="set-sub">${driveStatus}</div>
+        ${gdriveToken ? '' : '<div class="set-sub" onclick="enterDriveCode()" style="cursor:pointer;color:var(--blue);font-size:11px;margin-top:4px">Have a setup code? Enter it</div>'}
       </div>
       <button class="set-btn ${driveBtnCls}" onclick="${driveBtnFn}">${driveBtnLabel}</button>
     </div>
@@ -2180,6 +2222,11 @@ async function saveProxyUrl() {
 }
 
 // ═══ SERVICE WORKER + BOOT ════════════════════════════════════════════════
+// Refresh the Drive token when the app regains focus or the network returns,
+// so a backgrounded/installed PWA recovers without showing the reconnect banner.
+document.addEventListener('visibilitychange', () => { if (!document.hidden) maybeRefreshToken(); });
+window.addEventListener('online', () => { maybeRefreshToken(); });
+
 (async function init() {
   await openDB();
   if ('serviceWorker' in navigator) {

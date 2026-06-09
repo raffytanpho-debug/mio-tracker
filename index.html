@@ -11,48 +11,74 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Mio">
   <link rel="apple-touch-icon" href="apple-touch-icon-180.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg:#0d1117; --surface:#161b22; --surface2:#21262d; --border:#30363d;
-      --text:#f0f6fc; --muted:#7d8590;
-      --accent:#3fb950; --accent-l:#56d364;
-      --green:#3fb950; --red:#f85149; --yellow:#e3b341; --blue:#58a6ff; --purple:#bc8cff;
-      --nav-h:60px; --r:14px; --rs:10px;
+      /* Ember Night — warm dark (default) */
+      --bg:#171412; --surface:#221E1B; --surface2:#2C2723; --border:#38322C;
+      --text:#F4EFE8; --muted:#C0B7AC;
+      --accent:#C58A5C; --accent-l:#D8A475; --on-accent:#1B1511;
+      --green:#8AA195; --red:#E0857A; --yellow:#E0B257; --blue:#8FB0C9; --purple:#B891B2;
+      --warn-bg:rgba(216,164,117,.14); --warn-bd:rgba(216,164,117,.32); --warn-tx:#E8CBA6;
+      --ok-bg:rgba(138,161,149,.15); --ok-bd:rgba(138,161,149,.34); --ok-tx:#AAC3B5;
+      --serif:'Newsreader',Georgia,'Times New Roman',serif;
+      --nav-h:60px; --r:16px; --rs:12px;
+    }
+    /* Linen & Clay — warm light (system default unless overridden) */
+    @media (prefers-color-scheme: light){
+      :root:not([data-theme]){
+        --bg:#FAF5EF; --surface:#FFFDFC; --surface2:#F2ECE4; --border:#E6DED3;
+        --text:#231F1B; --muted:#6E655B;
+        --accent:#975435; --accent-l:#7E4429; --on-accent:#FFFFFF;
+        --green:#5C6F67; --red:#A8443A; --yellow:#8A5E16; --blue:#4E6B86; --purple:#7A5570;
+        --warn-bg:rgba(154,107,30,.12); --warn-bd:rgba(154,107,30,.30); --warn-tx:#7A4F12;
+        --ok-bg:rgba(92,111,103,.13); --ok-bd:rgba(92,111,103,.32); --ok-tx:#3E4F47;
+      }
+    }
+    :root[data-theme="light"]{
+      --bg:#FAF5EF; --surface:#FFFDFC; --surface2:#F2ECE4; --border:#E6DED3;
+      --text:#231F1B; --muted:#6E655B;
+      --accent:#975435; --accent-l:#7E4429; --on-accent:#FFFFFF;
+      --green:#5C6F67; --red:#A8443A; --yellow:#8A5E16; --blue:#4E6B86; --purple:#7A5570;
+      --warn-bg:rgba(154,107,30,.12); --warn-bd:rgba(154,107,30,.30); --warn-tx:#7A4F12;
+      --ok-bg:rgba(92,111,103,.13); --ok-bd:rgba(92,111,103,.32); --ok-tx:#3E4F47;
     }
     *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-    html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:15px;overscroll-behavior:none}
+    html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:15px;overscroll-behavior:none;-webkit-text-size-adjust:100%;-webkit-font-smoothing:antialiased}
 
     /* APP */
     #app{max-width:430px;margin:0 auto;height:100vh;display:flex;flex-direction:column;overflow:hidden}
-    #header{background:linear-gradient(160deg,#112218 0%,#0d1117 60%);padding:14px 16px 16px;flex-shrink:0;border-bottom:1px solid var(--border)}
+    #header{background:var(--bg);padding:14px 16px 16px;flex-shrink:0;border-bottom:1px solid var(--border)}
     #content{flex:1;overflow-y:auto;padding-bottom:var(--nav-h)}
     #nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;height:var(--nav-h);background:var(--surface);border-top:1px solid var(--border);display:flex;z-index:100}
 
     /* HEADER */
-    .drive-banner{display:flex;align-items:center;justify-content:space-between;gap:8px;background:rgba(248,81,73,.12);border:1px solid rgba(248,81,73,.3);border-radius:8px;padding:7px 10px;margin-bottom:12px;font-size:12px;color:#ffa198}
-    .drive-banner.ok{background:rgba(63,185,80,.1);border-color:rgba(63,185,80,.3);color:#7bc9a0}
-    .drive-banner button{background:rgba(248,81,73,.25);border:none;border-radius:6px;color:#ffa198;font-size:11px;font-weight:700;padding:3px 8px;cursor:pointer}
-    .hdr-lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1.2px;font-weight:700}
-    .hdr-name{font-size:28px;font-weight:800;letter-spacing:-.5px;color:var(--text);margin:2px 0 3px}
+    .drive-banner{display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--warn-bg);border:1px solid var(--warn-bd);border-radius:10px;padding:8px 11px;margin-bottom:12px;font-size:12px;color:var(--warn-tx)}
+    .drive-banner.ok{background:var(--ok-bg);border-color:var(--ok-bd);color:var(--ok-tx)}
+    .drive-banner button{background:var(--warn-bd);border:none;border-radius:7px;color:var(--warn-tx);font-size:11px;font-weight:600;padding:4px 9px;cursor:pointer}
+    .hdr-lbl{font-size:12px;color:var(--muted);letter-spacing:.2px;font-weight:600}
+    .hdr-name{font-family:var(--serif);font-size:30px;font-weight:600;letter-spacing:0;color:var(--text);margin:3px 0 4px}
     .hdr-age{font-size:13px;color:var(--accent-l);font-weight:600}
 
     /* NAV */
-    .nb{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;color:var(--muted);border:none;background:none;font-size:9px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;transition:color .2s;padding:0}
+    .nb{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;color:var(--muted);border:none;background:none;font-size:10px;font-weight:600;letter-spacing:.2px;transition:color .2s;padding:0}
     .nb.active{color:var(--accent-l)}
     .ni{font-size:18px;line-height:1}
 
     /* CARDS */
     .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:15px;margin:0 13px 10px}
-    .card-title{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:11px;font-weight:700}
+    .card-title{font-size:12px;letter-spacing:.2px;color:var(--muted);margin-bottom:11px;font-weight:600}
 
     /* STATS PAIR */
     .scard{background:var(--surface);border:1px solid var(--border);border-radius:var(--rs);padding:12px}
-    .s-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);font-weight:700}
+    .s-lbl{font-size:11px;letter-spacing:.2px;color:var(--muted);font-weight:600}
     .s-val{font-size:21px;font-weight:800;margin:3px 0 2px;letter-spacing:-.5px}
     .s-sub{font-size:11px;color:var(--muted)}
 
     /* SETTINGS */
-    .set-sec{padding:13px 13px 5px;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);font-weight:700}
+    .set-sec{padding:14px 13px 6px;font-size:12px;letter-spacing:.2px;color:var(--muted);font-weight:600}
     .set-row{background:var(--surface);border:1px solid var(--border);border-radius:var(--rs);padding:12px 13px;margin:0 13px 7px;display:flex;align-items:center;justify-content:space-between;gap:11px}
     .set-lbl{font-size:14px;font-weight:600}
     .set-sub{font-size:11px;color:var(--muted);margin-top:2px}
@@ -70,13 +96,13 @@
     .mdh{width:36px;height:4px;background:var(--border);border-radius:2px;margin:10px auto 17px}
     .mdt{font-size:17px;font-weight:800;margin-bottom:17px}
     .mf{margin-bottom:12px}
-    .ml{font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
+    .ml{font-size:12px;color:var(--muted);font-weight:600;letter-spacing:.2px;margin-bottom:5px}
     .mi{width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--rs);padding:10px 12px;color:var(--text);font-size:15px;outline:none;font-family:inherit;transition:border-color .15s}
     .mi:focus{border-color:var(--accent-l)}
     .ma{display:flex;gap:8px;margin-top:17px}
     .mb{flex:1;padding:12px;border-radius:var(--rs);font-size:14px;font-weight:700;cursor:pointer;border:none;transition:opacity .15s;font-family:inherit}
     .mb:active{opacity:.8}
-    .mb.primary{background:var(--accent);color:#fff}
+    .mb.primary{background:var(--accent);color:var(--on-accent)}
     .mb.danger{background:var(--red);color:#fff}
     .mb.cancel{background:var(--surface2);color:var(--text)}
 
@@ -129,7 +155,7 @@ const MIO_DOB = '2024-10-15';
 // (auth-code flow + refresh token in KV). The Worker holds the client_id/secret;
 // the app only ever holds an opaque session_id. See GOOGLE_DRIVE_AUTH_PLAYBOOK.md.
 const WORKER_BASE = 'https://claude-proxy.raffy-tanpho.workers.dev';
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.2.0';
 const DRIVE_FILE_NAME = 'mio-tracker-data.json';
 
 // CDC 18-month milestone checklist (all five domains)
@@ -267,7 +293,7 @@ const DEF = {
   activities: [],    // { id, weekOf, day, activity, domain, targetWords[], done }
   settings: {
     driveFileId: null,
-    theme: 'dark',
+    theme: 'system',
     checkinDoneDate: null,
     onboardingDone: false,
     proxyUrl: 'https://claude-proxy.raffy-tanpho.workers.dev'
@@ -532,8 +558,24 @@ async function loadData() {
 }
 
 // ═══ LAUNCH ════════════════════════════════════════════════════════════════
+// ═══ THEME (warm dark "Ember Night" default + warm light "Linen & Clay") ════
+// 'system' follows the device appearance; 'light'/'dark' force a theme.
+function applyTheme(t) {
+  const r = document.documentElement;
+  if (t === 'light' || t === 'dark') r.setAttribute('data-theme', t);
+  else r.removeAttribute('data-theme');
+}
+function setTheme(v) {
+  if (!data.settings) data.settings = clone(DEF.settings);
+  data.settings.theme = v;
+  applyTheme(v);
+  save();
+  if (view === 'settings') renderView();
+}
+
 async function launchApp() {
   await loadData();
+  applyTheme(data.settings?.theme || 'system');  // set warm theme before first render
   // Must await before first render: restores the Drive session and mints a fresh
   // token so the reconnect banner doesn't flash when the connection is fine.
   await tryRestoreFolder();
@@ -941,7 +983,7 @@ function buildHomeDone() {
     <div style="padding:12px 13px 0">
 
       <div class="card" style="background:linear-gradient(135deg,#112a1a 0%,#0d1e12 100%);border-color:#2a5c38;margin-bottom:10px">
-        <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#7bc9a0;font-weight:700;margin-bottom:6px">Daily Check-In — ✅ Done</div>
+        <div style="font-size:12px;letter-spacing:.2px;color:var(--ok-tx);font-weight:600;margin-bottom:6px">Today's check-in · done</div>
         ${todayWB ? `<div style="display:flex;flex-wrap:wrap;gap:14px;margin-bottom:8px">
           ${todayWB.sleepBand ? `<div><div style="font-size:10px;color:#5a9e77">Sleep</div><div style="font-weight:700;color:${SLEEP_COLOR[todayWB.sleepBand]||'var(--text)'}">${esc(todayWB.sleepBand)}</div></div>` : ''}
           ${todayWB.mood ? `<div><div style="font-size:10px;color:#5a9e77">Mood</div><div style="font-weight:700">${MOOD_ICON[todayWB.mood]||''} ${esc(todayWB.mood)}</div></div>` : ''}
@@ -965,7 +1007,7 @@ function buildHomeDone() {
         </div>
         <div style="display:flex;gap:6px">
           <select class="mi" id="home-lang" style="flex:1"><option value="Filipino">Filipino</option><option value="English">English</option><option value="Other">Other</option></select>
-          <button onclick="homeAddWord()" style="background:var(--accent);color:#fff;border:none;border-radius:var(--rs);padding:10px 16px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">+ Add</button>
+          <button onclick="homeAddWord()" style="background:var(--accent);color:var(--on-accent);border:none;border-radius:var(--rs);padding:10px 16px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">+ Add</button>
         </div>
       </div>
 
@@ -1040,7 +1082,7 @@ function buildObWelcome() {
         <div style="font-size:14px;color:var(--muted);line-height:1.6;margin-bottom:20px">
           Takes about 2 minutes. Skip anything you don't have handy — the daily check-in fills in the rest over time.
         </div>
-        <button onclick="nextOnboard()" style="width:100%;background:var(--accent);color:#fff;border:none;border-radius:var(--rs);padding:14px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:10px">Start setup →</button>
+        <button onclick="nextOnboard()" style="width:100%;background:var(--accent);color:var(--on-accent);border:none;border-radius:var(--rs);padding:14px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:10px">Start setup →</button>
         <button onclick="skipOnboard()" style="width:100%;background:var(--surface2);color:var(--muted);border:1px solid var(--border);border-radius:var(--rs);padding:11px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;margin-bottom:10px">Skip for now</button>
         <button onclick="importOnboardData()" style="background:none;border:none;color:var(--blue);font-size:13px;cursor:pointer;font-family:inherit;text-decoration:underline">Import from JSON (baby book data ready?)</button>
       </div>
@@ -1097,7 +1139,7 @@ function buildObWords() {
             <option value="English">English</option>
             <option value="Other">Other</option>
           </select>
-          <button onclick="addObWord()" style="background:var(--accent);color:#fff;border:none;border-radius:var(--rs);padding:10px 16px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">+ Add</button>
+          <button onclick="addObWord()" style="background:var(--accent);color:var(--on-accent);border:none;border-radius:var(--rs);padding:10px 16px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">+ Add</button>
         </div>
         <div style="font-size:12px;color:var(--muted)">The daily check-in will prompt you for new words every day once Phase 3 ships.</div>
       </div>
@@ -1163,7 +1205,7 @@ function buildObFinish() {
         <div style="font-size:48px;margin-bottom:12px">🎉</div>
         <div style="font-size:20px;font-weight:800;margin-bottom:8px">Baseline set!</div>
         <div style="font-size:14px;color:var(--muted);margin-bottom:20px">${wc} word${wc!==1?'s':''} · ${gc} measurement${gc!==1?'s':''} · ${mc} milestone${mc!==1?'s':''} reached</div>
-        <button onclick="completeOnboard()" style="width:100%;background:var(--accent);color:#fff;border:none;border-radius:var(--rs);padding:14px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit">Open Mio Tracker →</button>
+        <button onclick="completeOnboard()" style="width:100%;background:var(--accent);color:var(--on-accent);border:none;border-radius:var(--rs);padding:14px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit">Open Mio Tracker →</button>
       </div>
       <div class="card" style="border-style:dashed">
         <div class="card-title">📸 Baby book photos?</div>
@@ -1380,7 +1422,7 @@ function buildCIWords(q) {
     </div>
     <div style="display:flex;gap:6px">
       <select class="mi" id="ci-lang" style="flex:1"><option value="Filipino">Filipino</option><option value="English">English</option><option value="Other">Other</option></select>
-      <button onclick="ciAddWord()" style="background:var(--accent);color:#fff;border:none;border-radius:var(--rs);padding:10px 16px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">+ Add</button>
+      <button onclick="ciAddWord()" style="background:var(--accent);color:var(--on-accent);border:none;border-radius:var(--rs);padding:10px 16px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">+ Add</button>
     </div>
   </div>
   <div style="display:flex;gap:8px;margin:0 13px">
@@ -1749,7 +1791,7 @@ function buildGrowth() {
 
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
         <div style="font-size:13px;color:var(--muted)">${growthData.length} measurement${growthData.length!==1?'s':''} logged</div>
-        <button onclick="openGrowthModal()" style="background:var(--accent);color:#fff;border:none;border-radius:var(--rs);padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">+ Add</button>
+        <button onclick="openGrowthModal()" style="background:var(--accent);color:var(--on-accent);border:none;border-radius:var(--rs);padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">+ Add</button>
       </div>
 
       ${!hasData ? `
@@ -1757,7 +1799,7 @@ function buildGrowth() {
         <div style="font-size:40px;margin-bottom:10px">📏</div>
         <div style="font-size:16px;font-weight:700;margin-bottom:8px">No measurements yet</div>
         <div style="font-size:13px;color:var(--muted);margin-bottom:18px;line-height:1.6">Add weight, height, or head circumference. Plotted against WHO boys' percentile bands (P3 → P97).</div>
-        <button onclick="openGrowthModal()" style="background:var(--accent);color:#fff;border:none;border-radius:var(--rs);padding:12px 24px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Add first measurement</button>
+        <button onclick="openGrowthModal()" style="background:var(--accent);color:var(--on-accent);border:none;border-radius:var(--rs);padding:12px 24px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Add first measurement</button>
       </div>` : `
       ${metricCard('Weight','weightKg',WHO_WT_B,'kg',null)}
       ${metricCard('Length / Height','heightCm',WHO_LN_B,'cm', ageMonths(dob) < 24 ? 'Recumbent length reference (WHO, 0–24mo)' : null)}
@@ -2011,7 +2053,7 @@ function buildAdvisor() {
       <div class="card">
         <div class="card-title">How to enable</div>
         <div style="font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:14px">Go to ⚙️ Settings → AI Advisor and paste in your Cloudflare Worker proxy URL.</div>
-        <button onclick="sv('settings')" style="width:100%;padding:11px;background:var(--accent);color:#fff;border:none;border-radius:var(--rs);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Open Settings →</button>
+        <button onclick="sv('settings')" style="width:100%;padding:11px;background:var(--accent);color:var(--on-accent);border:none;border-radius:var(--rs);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Open Settings →</button>
       </div>
     </div>`;
 
@@ -2035,7 +2077,7 @@ function buildAdvisor() {
           <div style="max-width:86%;padding:10px 13px;
             border-radius:${isUser?'16px 16px 4px 16px':'16px 16px 16px 4px'};
             background:${isUser?'var(--accent)':'var(--surface2)'};
-            color:${isUser?'#fff':'var(--text)'};
+            color:${isUser?'var(--on-accent)':'var(--text)'};
             font-size:14px;line-height:1.5;word-break:break-word;
             border:${isUser?'none':'1px solid var(--border)'}">${isUser?esc(m.content):renderMD(m.content)}</div>
         </div>`;
@@ -2070,7 +2112,7 @@ function buildAdvisor() {
           style="flex:1;background:var(--surface2);border:1.5px solid var(--border);border-radius:12px;padding:9px 12px;color:var(--text);font-size:14px;font-family:inherit;outline:none;resize:none;line-height:1.4;min-height:40px;max-height:110px;overflow-y:auto"
           onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendAdvisorMsg()}"
           oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,110)+'px'"></textarea>
-        <button onclick="sendAdvisorMsg()" ${advisorBusy?'disabled':''} style="background:${advisorBusy?'var(--border)':'var(--accent)'};color:#fff;border:none;border-radius:12px;padding:9px 14px;font-weight:700;cursor:${advisorBusy?'default':'pointer'};font-family:inherit;font-size:14px;flex-shrink:0;align-self:flex-end">Send</button>
+        <button onclick="sendAdvisorMsg()" ${advisorBusy?'disabled':''} style="background:${advisorBusy?'var(--border)':'var(--accent)'};color:var(--on-accent);border:none;border-radius:12px;padding:9px 14px;font-weight:700;cursor:${advisorBusy?'default':'pointer'};font-family:inherit;font-size:14px;flex-shrink:0;align-self:flex-end">Send</button>
       </div>
       <div style="font-size:10px;color:var(--muted);margin-top:5px;text-align:center">Not a doctor · clinical questions routed to the pediatrician</div>
     </div>`;
@@ -2149,6 +2191,14 @@ function buildSettings() {
     </div>
     <div class="set-row">
       <div><div class="set-lbl">Languages tracked</div><div class="set-sub">${langs}</div></div>
+    </div>
+
+    <div class="set-sec">Appearance</div>
+    <div class="set-row">
+      <div><div class="set-lbl">Theme</div><div class="set-sub">Match your phone, or pick one</div></div>
+      <div style="display:flex;gap:6px">
+        ${['system','light','dark'].map(v => `<button class="set-btn ${(data.settings?.theme||'system')===v?'ok':''}" onclick="setTheme('${v}')">${v.charAt(0).toUpperCase()+v.slice(1)}</button>`).join('')}
+      </div>
     </div>
 
     <div class="set-sec">Sync</div>

@@ -3,7 +3,7 @@
 // Network-first for HTML documents and all API calls (Google, Cloudflare Worker).
 // Cache-first for static assets (manifest, icon, Chart.js — once added).
 
-const CACHE = 'mio-tracker-v3';
+const CACHE = 'mio-tracker-v4';
 
 const STATIC_ASSETS = [
   './manifest.json',

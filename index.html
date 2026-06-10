@@ -137,6 +137,7 @@
   <div id="content"></div>
   <nav id="nav">
     <button class="nb active" data-view="home"       onclick="sv('home')">      <span class="ni">🏠</span><span>Home</span></button>
+    <button class="nb"        data-view="words"      onclick="sv('words')">     <span class="ni">🔤</span><span>Words</span></button>
     <button class="nb"        data-view="milestones" onclick="sv('milestones')"><span class="ni">📋</span><span>Goals</span></button>
     <button class="nb"        data-view="growth"     onclick="sv('growth')">    <span class="ni">📈</span><span>Growth</span></button>
     <button class="nb"        data-view="trends"     onclick="sv('trends')">    <span class="ni">📅</span><span>Trends</span></button>
@@ -244,7 +245,9 @@ const WHO_HC_B = { // head circumference-for-age, cm
   30:[46.8,47.8,48.8,49.8,50.8,51.7,52.7]
 };
 const BAND_NAMES  = ['<P3','P3–P10','P10–P25','P25–P50','P50–P75','P75–P90','P90–P97','>P97'];
-const BAND_COLORS = ['var(--red)','var(--yellow)','var(--blue)','var(--accent-l)','var(--accent-l)','var(--blue)','var(--yellow)','var(--red)'];
+// Calm, non-alarming band colors. The extremes (<P3 / >P97) are usually still
+// normal, so they are muted rather than red. No traffic-light valence.
+const BAND_COLORS = ['var(--muted)','var(--muted)','var(--blue)','var(--green)','var(--green)','var(--blue)','var(--muted)','var(--muted)'];
 
 // ─── Daily core (always shown, in order) ────────────────────────────────────
 const CI_DAILY = [
@@ -286,7 +289,7 @@ const DEF = {
   growth: [],        // { id, date, ageMonths, weightKg, heightCm, headCm, note }
   milestones: [],    // { id, date, ageMonths, domain, item, status, note }
   wellbeing: [],     // { id, date, sleepBand, appetite, mood, activeBand, screenBand, readTogether, note }
-  words: [],         // { id, word, meaning, language, firstHeard }
+  words: [],         // { id, word, meaning, language, firstHeard, category, clarity }
   safetyStatus: {},  // { itemKey: lastConfirmedDate }
   checkinLog: [],    // { date, answeredKeys[], skippedKeys[] }
   immunizations: [], // { id, vaccine, date, source, note }
@@ -316,6 +319,21 @@ let _ciMS = {};            // temp storage for milestone items (avoids string-es
 let _msEditItem = null;    // milestone item being edited in modal
 let advisorMsgs = [];      // {role:'user'|'assistant', content:string}
 let advisorBusy = false;   // true while waiting for advisor response
+let _wordEdit = null;      // word id being edited in modal (null = new)
+let _wordFilter = { q:'', lang:'all', cat:'all', sort:'new' }; // Words view controls
+let _wordDraftCat = 'other'; // category selected in the Words add row
+
+// Word categories — plain, parent-friendly labels (not clinical)
+const WORD_CATS = [
+  { id:'people',  label:'People',  emoji:'👤' },
+  { id:'animals', label:'Animals', emoji:'🐾' },
+  { id:'food',    label:'Food',    emoji:'🍌' },
+  { id:'actions', label:'Actions', emoji:'🏃' },
+  { id:'objects', label:'Objects', emoji:'🧸' },
+  { id:'other',   label:'Other',   emoji:'•'  },
+];
+function catOf(w)   { return (w && w.category) || 'other'; }
+function catMeta(id){ return WORD_CATS.find(c => c.id === id) || WORD_CATS[WORD_CATS.length-1]; }
 
 // ═══ HELPERS ═══════════════════════════════════════════════════════════════
 function clone(o) { return JSON.parse(JSON.stringify(o)); }
@@ -449,16 +467,16 @@ function buildWhoChart(growthEntries, field, table, unit) {
   ].join(' ');
 
   const bands = `
-    <polygon points="${polyO}" fill="rgba(125,133,144,.05)" />
-    <polygon points="${polyN}" fill="rgba(63,185,80,.08)" />`;
+    <polygon points="${polyO}" fill="rgba(192,183,172,.07)" />
+    <polygon points="${polyN}" fill="rgba(138,161,149,.16)" />`;
 
-  // Percentile reference lines
+  // Percentile reference lines — warm, neutral tones (no alarm red/yellow)
   const PLINES = [
-    {i:0,c:'rgba(248,81,73,.55)',  da:'4,3', lb:'P3' },
-    {i:1,c:'rgba(227,179,65,.4)',  da:'3,3', lb:''   },
-    {i:3,c:'rgba(125,133,144,.45)',da:'',    lb:'P50'},
-    {i:5,c:'rgba(227,179,65,.4)',  da:'3,3', lb:''   },
-    {i:6,c:'rgba(248,81,73,.55)',  da:'4,3', lb:'P97'},
+    {i:0,c:'rgba(168,158,145,.5)', da:'4,3', lb:'P3' },
+    {i:1,c:'rgba(168,158,145,.35)',da:'3,3', lb:''   },
+    {i:3,c:'rgba(168,158,145,.7)', da:'',    lb:'P50'},
+    {i:5,c:'rgba(168,158,145,.35)',da:'3,3', lb:''   },
+    {i:6,c:'rgba(168,158,145,.5)', da:'4,3', lb:'P97'},
   ];
   let pLines = '';
   for (const p of PLINES) {
@@ -474,10 +492,10 @@ function buildWhoChart(growthEntries, field, table, unit) {
   let mioLine = '';
   if (pts.length >= 2) {
     const pd = pts.map((p,i) => `${i===0?'M':'L'}${xp(p.m).toFixed(1)},${yp(p.v).toFixed(1)}`).join(' ');
-    mioLine = `<path d="${pd}" fill="none" stroke="#3fb950" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />`;
+    mioLine = `<path d="${pd}" fill="none" stroke="#C58A5C" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />`;
   }
   const mioDots = pts.map(p =>
-    `<circle cx="${xp(p.m).toFixed(1)}" cy="${yp(p.v).toFixed(1)}" r="4" fill="#3fb950" stroke="#0d1117" stroke-width="1.5" />`
+    `<circle cx="${xp(p.m).toFixed(1)}" cy="${yp(p.v).toFixed(1)}" r="4" fill="#C58A5C" stroke="#8A5A38" stroke-width="1.5" />`
   ).join('');
 
   // Axes + labels
@@ -485,20 +503,20 @@ function buildWhoChart(growthEntries, field, table, unit) {
   let xTicks = '';
   for (let m = 0; m <= maxM; m += xStep) {
     const x = xp(m).toFixed(1);
-    xTicks += `<line x1="${x}" y1="${MT+CH}" x2="${x}" y2="${MT+CH+3}" stroke="rgba(48,54,61,.8)" stroke-width="1"/>
-      <text x="${x}" y="${MT+CH+13}" font-size="8" fill="rgba(125,133,144,.8)" text-anchor="middle">${m}</text>`;
+    xTicks += `<line x1="${x}" y1="${MT+CH}" x2="${x}" y2="${MT+CH+3}" stroke="rgba(168,158,145,.45)" stroke-width="1"/>
+      <text x="${x}" y="${MT+CH+13}" font-size="8" fill="rgba(168,158,145,.85)" text-anchor="middle">${m}</text>`;
   }
   let yLabels = '';
   for (let i = 0; i <= 4; i++) {
     const val = yMin + (yMax - yMin) * (i / 4);
     const y   = yp(val).toFixed(1);
-    yLabels += `<line x1="${ML-2}" y1="${y}" x2="${ML}" y2="${y}" stroke="rgba(48,54,61,.8)" stroke-width="1"/>
-      <text x="${ML-4}" y="${(+y+3).toFixed(1)}" font-size="8" fill="rgba(125,133,144,.8)" text-anchor="end">${val.toFixed(1)}</text>`;
+    yLabels += `<line x1="${ML-2}" y1="${y}" x2="${ML}" y2="${y}" stroke="rgba(168,158,145,.45)" stroke-width="1"/>
+      <text x="${ML-4}" y="${(+y+3).toFixed(1)}" font-size="8" fill="rgba(168,158,145,.85)" text-anchor="end">${val.toFixed(1)}</text>`;
   }
   const axes = `
-    <line x1="${ML}" y1="${MT}" x2="${ML}" y2="${MT+CH}" stroke="rgba(48,54,61,.8)" stroke-width="1"/>
-    <line x1="${ML}" y1="${MT+CH}" x2="${ML+CW}" y2="${MT+CH}" stroke="rgba(48,54,61,.8)" stroke-width="1"/>
-    <text x="${(ML+CW/2).toFixed(1)}" y="${H-3}" font-size="8" fill="rgba(125,133,144,.6)" text-anchor="middle">age (months)</text>`;
+    <line x1="${ML}" y1="${MT}" x2="${ML}" y2="${MT+CH}" stroke="rgba(168,158,145,.45)" stroke-width="1"/>
+    <line x1="${ML}" y1="${MT+CH}" x2="${ML+CW}" y2="${MT+CH}" stroke="rgba(168,158,145,.45)" stroke-width="1"/>
+    <text x="${(ML+CW/2).toFixed(1)}" y="${H-3}" font-size="8" fill="rgba(168,158,145,.7)" text-anchor="middle">age (months)</text>`;
 
   return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block;overflow:visible">
     ${axes}${xTicks}${yLabels}${bands}${pLines}${mioLine}${mioDots}
@@ -925,6 +943,7 @@ function sv(v) {
 function renderView() {
   const c = document.getElementById('content');
   if (view === 'home')       c.innerHTML = buildHome();
+  else if (view === 'words')      c.innerHTML = buildWords();
   else if (view === 'milestones') c.innerHTML = buildMilestones();
   else if (view === 'growth')    c.innerHTML = buildGrowth();
   else if (view === 'trends')    c.innerHTML = buildTrends();
@@ -982,15 +1001,18 @@ function buildHomeDone() {
   return `
     <div style="padding:12px 13px 0">
 
-      <div class="card" style="background:linear-gradient(135deg,#112a1a 0%,#0d1e12 100%);border-color:#2a5c38;margin-bottom:10px">
-        <div style="font-size:12px;letter-spacing:.2px;color:var(--ok-tx);font-weight:600;margin-bottom:6px">Today's check-in · done</div>
+      <div class="card" style="background:var(--ok-bg);border-color:var(--ok-bd);margin-bottom:10px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <div style="font-size:13px;letter-spacing:.2px;color:var(--ok-tx);font-weight:700">Today's check-in is saved ✓</div>
+          <button onclick="editTodayCheckin()" style="background:none;border:1px solid var(--ok-bd);color:var(--ok-tx);border-radius:999px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">Edit today</button>
+        </div>
         ${todayWB ? `<div style="display:flex;flex-wrap:wrap;gap:14px;margin-bottom:8px">
-          ${todayWB.sleepBand ? `<div><div style="font-size:10px;color:#5a9e77">Sleep</div><div style="font-weight:700;color:${SLEEP_COLOR[todayWB.sleepBand]||'var(--text)'}">${esc(todayWB.sleepBand)}</div></div>` : ''}
-          ${todayWB.mood ? `<div><div style="font-size:10px;color:#5a9e77">Mood</div><div style="font-weight:700">${MOOD_ICON[todayWB.mood]||''} ${esc(todayWB.mood)}</div></div>` : ''}
-          ${todayWB.appetite ? `<div><div style="font-size:10px;color:#5a9e77">Appetite</div><div style="font-weight:700">${esc(todayWB.appetite)}</div></div>` : ''}
-          ${todayWB.readTogether != null ? `<div><div style="font-size:10px;color:#5a9e77">Reading</div><div style="font-weight:700">${todayWB.readTogether ? 'Yes ✓' : '—'}</div></div>` : ''}
+          ${todayWB.sleepBand ? `<div><div style="font-size:10px;color:var(--ok-tx);opacity:.85">Sleep</div><div style="font-weight:700;color:${SLEEP_COLOR[todayWB.sleepBand]||'var(--text)'}">${esc(todayWB.sleepBand)}</div></div>` : ''}
+          ${todayWB.mood ? `<div><div style="font-size:10px;color:var(--ok-tx);opacity:.85">Mood</div><div style="font-weight:700">${MOOD_ICON[todayWB.mood]||''} ${esc(todayWB.mood)}</div></div>` : ''}
+          ${todayWB.appetite ? `<div><div style="font-size:10px;color:var(--ok-tx);opacity:.85">Appetite</div><div style="font-weight:700">${esc(todayWB.appetite)}</div></div>` : ''}
+          ${todayWB.readTogether != null ? `<div><div style="font-size:10px;color:var(--ok-tx);opacity:.85">Reading</div><div style="font-weight:700">${todayWB.readTogether ? 'Yes ✓' : '—'}</div></div>` : ''}
         </div>` : ''}
-        <div style="font-size:12px;color:#5a9e77">Both parents can still add words below.</div>
+        <div style="font-size:12px;color:var(--ok-tx);opacity:.85">Both parents can still add words below, any time.</div>
       </div>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 0 10px">
@@ -1007,8 +1029,10 @@ function buildHomeDone() {
         </div>
         <div style="display:flex;gap:6px">
           <select class="mi" id="home-lang" style="flex:1"><option value="Filipino">Filipino</option><option value="English">English</option><option value="Other">Other</option></select>
+          ${voiceSupported() ? `<button onclick="startVoice('home-word','home-lang')" title="Voice" style="background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--rs);padding:0 12px;font-size:16px;cursor:pointer;font-family:inherit">🎤</button>` : ''}
           <button onclick="homeAddWord()" style="background:var(--accent);color:var(--on-accent);border:none;border-radius:var(--rs);padding:10px 16px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">+ Add</button>
         </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:8px">More options in the <span onclick="sv('words')" style="color:var(--accent-l);cursor:pointer;font-weight:700">Words tab ›</span></div>
       </div>
 
       ${lastGrowth ? `
@@ -1231,7 +1255,7 @@ function addObWord() {
   const language = document.getElementById('obLang')?.value || 'Filipino';
   if (!data.words) data.words = [];
   if (data.words.some(w => w.word.toLowerCase()===word.toLowerCase())) { toast('Already in the list.'); return; }
-  data.words.push({ id:uid(), word, meaning, language, firstHeard:today() });
+  data.words.push({ id:uid(), word, meaning, language, firstHeard:today(), category:'other', clarity:null });
   renderView();
 }
 
@@ -1350,6 +1374,23 @@ function initCheckin() {
   };
 }
 
+// Re-open today's check-in to adjust answers. Prefills from the saved record
+// so existing answers are preserved; the merge-only-non-null logic in
+// finishCheckin protects anything left untouched.
+function editTodayCheckin() {
+  initCheckin();
+  const todayWB = (data.wellbeing || []).find(w => w.date === today());
+  if (todayWB) {
+    for (const k of ['sleepBand','appetite','mood','activeBand','screenBand','readTogether','note']) {
+      if (todayWB[k] != null) checkinState.wellbeing[k] = todayWB[k];
+    }
+    if (todayWB.screenBand != null) checkinState._screenVal = todayWB.screenBand;
+    if (todayWB.readTogether != null) checkinState._readVal = todayWB.readTogether;
+  }
+  if (data.settings) data.settings.checkinDoneDate = null;
+  renderView();
+}
+
 function buildCheckinUI() {
   if (!checkinState) initCheckin();
   const { questions, step } = checkinState;
@@ -1400,7 +1441,7 @@ function buildCIScreenRead(q) {
     <div style="font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);font-weight:700;margin-bottom:8px">Read together today?</div>
     <div style="display:flex;gap:7px">
       <button onclick="ciReadPick(true)"  style="flex:1;padding:12px;border-radius:var(--rs);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;color:var(--text);border:1.5px solid ${rv===true?'rgba(63,185,80,.4)':'var(--border)'};background:${rv===true?'rgba(63,185,80,.1)':'var(--surface2)'}">Yes ✓</button>
-      <button onclick="ciReadPick(false)" style="flex:1;padding:12px;border-radius:var(--rs);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;color:var(--text);border:1.5px solid ${rv===false?'rgba(248,81,73,.3)':'var(--border)'};background:${rv===false?'rgba(248,81,73,.08)':'var(--surface2)'}">Not today</button>
+      <button onclick="ciReadPick(false)" style="flex:1;padding:12px;border-radius:var(--rs);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;color:var(--text);border:1.5px solid ${rv===false?'var(--accent)':'var(--border)'};background:${rv===false?'var(--surface2)':'var(--surface2)'}">Not today</button>
     </div>
   </div>
   <div style="display:flex;gap:8px;margin:0 13px">
@@ -1488,7 +1529,7 @@ function buildCISafety(q) {
     <div style="font-size:12px;color:var(--muted);margin-bottom:14px">${status[next.key]?'Last confirmed: '+status[next.key]:'Not yet confirmed'}</div>
     <div style="display:flex;gap:8px">
       <button onclick="ciSafetyAnswer('${next.key}',true)"  style="flex:1;padding:14px;border-radius:var(--rs);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;border:1.5px solid rgba(63,185,80,.3);background:rgba(63,185,80,.08);color:var(--text)">✓ Yes, sorted</button>
-      <button onclick="ciSafetyAnswer('${next.key}',false)" style="flex:1;padding:14px;border-radius:var(--rs);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;border:1.5px solid rgba(248,81,73,.3);background:rgba(248,81,73,.08);color:var(--red)">Need to fix</button>
+      <button onclick="ciSafetyAnswer('${next.key}',false)" style="flex:1;padding:14px;border-radius:var(--rs);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;border:1.5px solid var(--warn-bd);background:var(--warn-bg);color:var(--warn-tx)">Need to fix</button>
     </div>
   </div>${ciSkipBtn('safety')}`;
 }
@@ -1529,7 +1570,7 @@ function ciAddWord() {
   const meaning  = (document.getElementById('ci-meaning')?.value || '').trim();
   const language = document.getElementById('ci-lang')?.value || 'Filipino';
   if (checkinState.newWords.some(w => w.word.toLowerCase() === word.toLowerCase())) { toast('Already added.'); return; }
-  checkinState.newWords.push({ id:uid(), word, meaning, language, firstHeard:today() });
+  checkinState.newWords.push({ id:uid(), word, meaning, language, firstHeard:today(), category:'other', clarity:null });
   renderView();
 }
 
@@ -1603,7 +1644,9 @@ async function finishCheckin() {
   if (hasWB) {
     if (!data.wellbeing) data.wellbeing = [];
     const ex = data.wellbeing.find(w => w.date === t);
-    if (ex) Object.assign(ex, wb);
+    // Merge only the fields actually answered, so re-opening to edit never
+    // wipes a previously-answered field that was skipped this time around.
+    if (ex) { for (const k in wb) { if (k !== 'id' && wb[k] != null) ex[k] = wb[k]; } }
     else data.wellbeing.push(wb);
   }
   for (const w of checkinState.newWords) {
@@ -1618,7 +1661,12 @@ async function finishCheckin() {
   }
   if (checkinState.growthEntry) {
     if (!data.growth) data.growth = [];
-    data.growth.push(checkinState.growthEntry);
+    // Dedupe by date so editing today's check-in can't create a duplicate
+    // measurement: same-day re-entry merges fields instead of adding a row.
+    const g = checkinState.growthEntry;
+    const exg = data.growth.find(x => x.date === g.date);
+    if (exg) { for (const k in g) { if (k !== 'id' && g[k] != null) exg[k] = g[k]; } }
+    else data.growth.push(g);
   }
   if (!data.checkinLog) data.checkinLog = [];
   const exLog = data.checkinLog.find(l => l.date === t);
@@ -1639,10 +1687,300 @@ async function homeAddWord() {
   const language = document.getElementById('home-lang')?.value || 'Filipino';
   if (!data.words) data.words = [];
   if (data.words.some(w => w.word.toLowerCase() === word.toLowerCase())) { toast('Already in the list.'); return; }
-  data.words.push({ id:uid(), word, meaning, language, firstHeard:today() });
+  data.words.push({ id:uid(), word, meaning, language, firstHeard:today(), category:'other', clarity:null });
   await save();
   renderView();
-  toast(`Added "${word}"!`);
+  toast(`Added "${word}".`);
+}
+
+// ═══ WORDS VIEW ════════════════════════════════════════════════════════════
+function voiceSupported() {
+  return ('webkitSpeechRecognition' in window) || ('SpeechRecognition' in window);
+}
+
+// Optional speech-to-text. Drops the result into the target input for the
+// parent to confirm and tap Add — never auto-saves (accuracy first).
+function startVoice(targetId, langSelId) {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { toast('Voice input is not available on this browser.'); return; }
+  const inp = document.getElementById(targetId);
+  let lang = 'en-US';
+  const ls = langSelId && document.getElementById(langSelId);
+  if (ls && /fil|tag/i.test(ls.value)) lang = 'fil-PH';
+  const rec = new SR();
+  rec.lang = lang; rec.interimResults = false; rec.maxAlternatives = 1;
+  rec.onresult = e => {
+    const t = (e.results[0][0].transcript || '').trim().replace(/[.\s]+$/, '');
+    if (inp) { inp.value = t; inp.focus(); }
+  };
+  rec.onerror = () => toast("Didn't catch that — try again.");
+  toast('Listening…');
+  try { rec.start(); } catch (e) {}
+}
+
+function setWordFilter(key, val) { _wordFilter[key] = val; renderView(); }
+function setWordSort()           { _wordFilter.sort = _wordFilter.sort === 'az' ? 'new' : 'az'; renderView(); }
+function onWordSearch(v) {
+  _wordFilter.q = v; renderView();
+  const el = document.getElementById('words-search');
+  if (el) { el.focus(); const n = el.value.length; try { el.setSelectionRange(n, n); } catch (e) {} }
+}
+
+// Draft category for the add row / edit modal — toggled in the DOM so it never
+// re-renders the form and clears a half-typed word.
+function setDraftCat(id) {
+  _wordDraftCat = id;
+  document.querySelectorAll('[data-dcat]').forEach(b => {
+    const on = b.dataset.dcat === id;
+    b.style.border = '1.5px solid ' + (on ? 'var(--accent)' : 'var(--border)');
+    b.style.background = on ? 'var(--accent)' : 'var(--surface2)';
+    b.style.color = on ? 'var(--on-accent)' : 'var(--text)';
+  });
+}
+let _wordDraftClarity = null;
+function setDraftClarity(val) {
+  _wordDraftClarity = (_wordDraftClarity === val ? null : val);
+  document.querySelectorAll('[data-clar]').forEach(b => {
+    const on = b.dataset.clar === _wordDraftClarity;
+    b.style.border = '1.5px solid ' + (on ? 'var(--accent)' : 'var(--border)');
+    b.style.background = on ? 'var(--accent)' : 'var(--surface2)';
+    b.style.color = on ? 'var(--on-accent)' : 'var(--text)';
+  });
+}
+
+async function wordsAddWord() {
+  const word = (document.getElementById('words-word')?.value || '').trim();
+  if (!word) return;
+  const meaning  = (document.getElementById('words-meaning')?.value || '').trim();
+  const language = document.getElementById('words-lang')?.value || 'Filipino';
+  if (!data.words) data.words = [];
+  if (data.words.some(w => w.word.toLowerCase() === word.toLowerCase())) { toast('Already in the list.'); return; }
+  data.words.push({ id:uid(), word, meaning, language, firstHeard:today(), category:_wordDraftCat || 'other', clarity:null });
+  _wordDraftCat = 'other';
+  await save();
+  renderView();
+  toast(`Added "${word}".`);
+}
+
+// Cumulative vocabulary growth — a step curve built from firstHeard dates.
+function buildVocabChart(all) {
+  const dated = all.filter(w => w.firstHeard).slice().sort((a,b) => a.firstHeard.localeCompare(b.firstHeard));
+  if (dated.length < 2) {
+    return `<div style="font-size:12px;color:var(--muted);line-height:1.6">Once a few words have dates on them, a growth curve appears here. Keep adding words as Mio says them.</div>`;
+  }
+  const W=300,H=120,ML=22,MT=8,CW=W-ML-8,CH=H-MT-16;
+  const t0 = new Date(dated[0].firstHeard+'T12:00:00').getTime();
+  const t1 = Date.now();
+  const span = Math.max(86400000, t1 - t0);
+  const total = dated.length;
+  const xp = t => ML + ((t - t0) / span) * CW;
+  const yp = c => MT + CH * (1 - c / Math.max(total,1));
+  let path = `M${ML.toFixed(1)},${yp(0).toFixed(1)}`;
+  let prevC = 0;
+  const dots = [];
+  dated.forEach((w,i) => {
+    const x = xp(new Date(w.firstHeard+'T12:00:00').getTime());
+    const c = i + 1;
+    path += ` L${x.toFixed(1)},${yp(prevC).toFixed(1)} L${x.toFixed(1)},${yp(c).toFixed(1)}`;
+    prevC = c;
+    dots.push(`<circle cx="${x.toFixed(1)}" cy="${yp(c).toFixed(1)}" r="2.3" fill="#C58A5C"/>`);
+  });
+  path += ` L${xp(t1).toFixed(1)},${yp(prevC).toFixed(1)}`;
+  return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block">
+    <line x1="${ML}" y1="${MT}" x2="${ML}" y2="${(MT+CH).toFixed(1)}" stroke="rgba(168,158,145,.4)" stroke-width="1"/>
+    <line x1="${ML}" y1="${(MT+CH).toFixed(1)}" x2="${(ML+CW).toFixed(1)}" y2="${(MT+CH).toFixed(1)}" stroke="rgba(168,158,145,.4)" stroke-width="1"/>
+    <path d="${path}" fill="none" stroke="#C58A5C" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    ${dots.join('')}
+    <text x="${ML-4}" y="${(yp(total)+3).toFixed(1)}" font-size="8" fill="rgba(168,158,145,.9)" text-anchor="end">${total}</text>
+    <text x="${ML-4}" y="${(yp(0)+3).toFixed(1)}" font-size="8" fill="rgba(168,158,145,.9)" text-anchor="end">0</text>
+    <text x="${ML}" y="${H-3}" font-size="8" fill="rgba(168,158,145,.7)">${dated[0].firstHeard}</text>
+    <text x="${(ML+CW).toFixed(1)}" y="${H-3}" font-size="8" fill="rgba(168,158,145,.7)" text-anchor="end">today</text>
+  </svg>`;
+}
+
+function buildWords() {
+  const all = (data.words || []);
+  const total = all.length;
+  const f = _wordFilter;
+  const voiceOK = voiceSupported();
+
+  // milestone badges (use total for "reached", nth dated word for the date)
+  const dated = all.filter(w => w.firstHeard).slice().sort((a,b) => a.firstHeard.localeCompare(b.firstHeard));
+  const marks = [10,25,50,100].map(n => ({ n, reached: total >= n, date: total >= n ? (dated[n-1]?.firstHeard || '') : '' }));
+  const nextMark = marks.find(m => !m.reached);
+  const combo = (data.wellbeing||[]).filter(w => w.twoWordCombos).map(w => w.date).sort()[0] || null;
+
+  // new this week
+  const weekAgo = (() => { const d = new Date(); d.setDate(d.getDate()-7); return d.toISOString().slice(0,10); })();
+  const newThisWeek = all.filter(w => (w.firstHeard||'') >= weekAgo).length;
+
+  // filtered + sorted list
+  let list = all.slice();
+  if (f.q) { const q = f.q.toLowerCase(); list = list.filter(w => (w.word||'').toLowerCase().includes(q) || (w.meaning||'').toLowerCase().includes(q)); }
+  if (f.lang !== 'all') list = list.filter(w => (w.language||'Other') === f.lang);
+  if (f.cat  !== 'all') list = list.filter(w => catOf(w) === f.cat);
+  if (f.sort === 'az') list.sort((a,b) => (a.word||'').localeCompare(b.word||''));
+  else                 list.sort((a,b) => (b.firstHeard||'').localeCompare(a.firstHeard||''));
+
+  const langsPresent = [...new Set(all.map(w => w.language||'Other'))];
+
+  const chip = (on, extra) => `display:inline-flex;align-items:center;gap:4px;padding:6px 11px;border-radius:999px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;border:1.5px solid ${on?'var(--accent)':'var(--border)'};background:${on?'var(--accent)':'var(--surface2)'};color:${on?'var(--on-accent)':'var(--text)'};${extra||''}`;
+
+  const filterLangChips = ['all', ...langsPresent].map(l =>
+    `<button onclick="setWordFilter('lang','${l}')" style="${chip(f.lang===l)}">${l==='all'?'All langs':esc(l)}</button>`).join('');
+  const filterCatChips = ['all', ...WORD_CATS.map(c=>c.id)].map(cid => {
+    const lbl = cid==='all' ? 'All' : catMeta(cid).emoji+' '+catMeta(cid).label;
+    return `<button onclick="setWordFilter('cat','${cid}')" style="${chip(f.cat===cid)}">${lbl}</button>`;
+  }).join('');
+
+  const draftCatChips = WORD_CATS.map(c =>
+    `<button data-dcat="${c.id}" onclick="setDraftCat('${c.id}')" style="${chip(_wordDraftCat===c.id)}">${c.emoji} ${c.label}</button>`).join('');
+
+  const micBtn = (target, langSel) => voiceOK
+    ? `<button onclick="startVoice('${target}','${langSel}')" title="Voice" style="background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--rs);padding:0 12px;font-size:16px;cursor:pointer;font-family:inherit">🎤</button>`
+    : '';
+
+  const milestoneRow = `
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">
+      ${marks.filter(m=>m.reached).map(m => `<span style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:700;background:var(--ok-bg);border:1px solid var(--ok-bd);color:var(--ok-tx)">★ ${m.n} words${m.date?` · ${m.date}`:''}</span>`).join('')}
+      ${combo ? `<span style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:700;background:var(--ok-bg);border:1px solid var(--ok-bd);color:var(--ok-tx)">★ first 2-word combo · ${combo}</span>` : ''}
+      ${nextMark ? `<span style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:600;background:var(--surface2);border:1px dashed var(--border);color:var(--muted)">next: ${nextMark.n} words (${nextMark.n-total} to go)</span>` : ''}
+    </div>`;
+
+  return `
+    <div style="padding:12px 13px 0">
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+        <div class="scard"><div class="s-lbl">Words</div><div class="s-val" style="color:var(--accent-l)">${total}</div><div class="s-sub">all languages</div></div>
+        <div class="scard"><div class="s-lbl">New this week</div><div class="s-val" style="color:var(--blue)">${newThisWeek}</div><div class="s-sub">last 7 days</div></div>
+      </div>
+
+      <div class="card" style="margin-bottom:10px">
+        <div class="card-title">Vocabulary growth</div>
+        ${buildVocabChart(all)}
+        ${total>0 ? milestoneRow : ''}
+      </div>
+
+      <div class="card" style="margin-bottom:10px">
+        <div class="card-title">Add a word</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:10px">All languages. ${voiceOK?'Type or tap the mic.':'Type it in.'} You can set the kind of word below.</div>
+        <div style="display:flex;gap:6px;margin-bottom:6px">
+          <input class="mi" id="words-word" placeholder="Word or sound" style="flex:2">
+          <input class="mi" id="words-meaning" placeholder="Meaning?" style="flex:1">
+        </div>
+        <div style="display:flex;gap:6px;margin-bottom:8px">
+          <select class="mi" id="words-lang" style="flex:1"><option value="Filipino">Filipino</option><option value="English">English</option><option value="Other">Other</option></select>
+          ${micBtn('words-word','words-lang')}
+          <button onclick="wordsAddWord()" style="background:var(--accent);color:var(--on-accent);border:none;border-radius:var(--rs);padding:10px 16px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">+ Add</button>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">${draftCatChips}</div>
+      </div>
+
+      ${total === 0 ? `
+      <div class="card" style="text-align:center;padding:28px 16px">
+        <div style="font-size:40px;margin-bottom:10px">🔤</div>
+        <div style="font-size:15px;font-weight:700;margin-bottom:5px">No words yet</div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.6">Add the first word or sound you want to remember. Even an approximation counts.</div>
+      </div>` : `
+      <div class="card" style="margin-bottom:10px">
+        <div style="display:flex;gap:6px;margin-bottom:8px">
+          <input class="mi" id="words-search" value="${esc(f.q)}" oninput="onWordSearch(this.value)" placeholder="Search words…" style="flex:1">
+          <button onclick="setWordSort()" style="background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--rs);padding:0 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">${f.sort==='az'?'A–Z':'Newest'}</button>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px">${filterLangChips}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">${filterCatChips}</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px">${list.length} of ${total} shown · tap a word to edit</div>
+        <div>
+          ${list.length === 0 ? `<div style="font-size:13px;color:var(--muted);font-style:italic;padding:8px 0">No words match that filter.</div>` :
+          list.map(w => `
+            <div onclick="openWordModal('${w.id}')" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);cursor:pointer">
+              <div style="min-width:0">
+                <div style="font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                  <span>${esc(w.word)}</span>
+                  ${w.clarity==='approx' ? `<span style="font-size:9px;font-weight:700;color:var(--muted);border:1px solid var(--border);border-radius:8px;padding:1px 5px">approx</span>` : ''}
+                </div>
+                ${w.meaning ? `<div style="font-size:12px;color:var(--muted)">${esc(w.meaning)}</div>` : ''}
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+                <span style="font-size:13px" title="${esc(catMeta(catOf(w)).label)}">${catMeta(catOf(w)).emoji}</span>
+                <span style="font-size:11px;color:var(--accent-l)">${esc(w.language||'')}</span>
+              </div>
+            </div>`).join('')}
+        </div>
+      </div>`}
+
+    </div>
+    <div class="gap"></div>
+  `;
+}
+
+function openWordModal(id) {
+  const w = (data.words||[]).find(x => x.id === id);
+  if (!w) return;
+  _wordEdit = id;
+  _wordDraftCat = catOf(w);
+  _wordDraftClarity = w.clarity || null;
+  const chip = on => `display:inline-flex;align-items:center;gap:4px;padding:7px 12px;border-radius:999px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;border:1.5px solid ${on?'var(--accent)':'var(--border)'};background:${on?'var(--accent)':'var(--surface2)'};color:${on?'var(--on-accent)':'var(--text)'}`;
+  const catChips = WORD_CATS.map(c => `<button data-dcat="${c.id}" onclick="setDraftCat('${c.id}')" style="${chip(_wordDraftCat===c.id)}">${c.emoji} ${c.label}</button>`).join('');
+  const clarChips = [['clear','Clear'],['approx','Approximation']].map(([v,l]) => `<button data-clar="${v}" onclick="setDraftClarity('${v}')" style="${chip(_wordDraftClarity===v)}">${l}</button>`).join('');
+  const langOpts = ['Filipino','English','Other'].map(l => `<option value="${l}"${ (w.language||'Filipino')===l?' selected':''}>${l}</option>`).join('');
+  openModal(`
+    <div class="mdh"></div>
+    <div class="mdt">Edit word</div>
+    <input class="mi" id="we-word" value="${esc(w.word)}" placeholder="Word or sound" style="width:100%;margin-bottom:8px">
+    <input class="mi" id="we-meaning" value="${esc(w.meaning||'')}" placeholder="Meaning?" style="width:100%;margin-bottom:8px">
+    <select class="mi" id="we-lang" style="width:100%;margin-bottom:8px">${langOpts}</select>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Kind of word</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">${catChips}</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:6px">How it sounds</div>
+    <div style="display:flex;gap:6px;margin-bottom:10px">${clarChips}</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:6px">First heard</div>
+    <input class="mi" id="we-date" type="date" value="${esc(w.firstHeard||'')}" style="width:100%;margin-bottom:14px">
+    <button onclick="saveWord()" style="width:100%;padding:13px;border-radius:var(--rs);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;background:var(--accent);color:var(--on-accent);border:none;margin-bottom:8px">Save</button>
+    <div style="display:flex;gap:8px">
+      <button onclick="closeModal()" style="flex:1;padding:12px;border-radius:var(--rs);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;background:none;border:1px solid var(--border);color:var(--muted)">Cancel</button>
+      <button onclick="askDeleteWord('${id}')" style="flex:1;padding:12px;border-radius:var(--rs);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;background:var(--warn-bg);border:1px solid var(--warn-bd);color:var(--warn-tx)">Delete</button>
+    </div>
+  `);
+}
+
+async function saveWord() {
+  if (!_wordEdit) return;
+  const w = (data.words||[]).find(x => x.id === _wordEdit);
+  if (!w) { closeModal(); return; }
+  const word = (document.getElementById('we-word')?.value || '').trim();
+  if (!word) { toast("Word can't be empty."); return; }
+  w.word     = word;
+  w.meaning  = (document.getElementById('we-meaning')?.value || '').trim();
+  w.language = document.getElementById('we-lang')?.value || w.language;
+  w.category = _wordDraftCat || 'other';
+  w.clarity  = _wordDraftClarity || null;
+  const fh = document.getElementById('we-date')?.value;
+  if (fh) w.firstHeard = fh;
+  _wordEdit = null;
+  await save();
+  closeModal();
+  renderView();
+  toast('Word updated.');
+}
+
+function askDeleteWord(id) {
+  openModal(`
+    <div class="mdh"></div>
+    <div class="mdt">Delete this word?</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:18px;line-height:1.5">It will be removed from Mio's list. You can always add it again later.</div>
+    <button onclick="confirmDeleteWord('${id}')" style="width:100%;padding:13px;border-radius:var(--rs);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;background:var(--warn-bg);border:1px solid var(--warn-bd);color:var(--warn-tx);margin-bottom:8px">Delete</button>
+    <button onclick="openWordModal('${id}')" style="width:100%;padding:12px;border-radius:var(--rs);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;background:none;border:1px solid var(--border);color:var(--muted)">Keep it</button>
+  `);
+}
+
+async function confirmDeleteWord(id) {
+  data.words = (data.words||[]).filter(w => w.id !== id);
+  _wordEdit = null;
+  await save();
+  closeModal();
+  renderView();
+  toast('Word deleted.');
 }
 
 // ═══ MILESTONES VIEW ══════════════════════════════════════════════════════
@@ -1674,6 +2012,9 @@ function buildMilestones() {
           <div style="font-size:12px;font-weight:700;color:var(--accent-l)">${DICONS[domain]} ${DLABELS[domain]}${speechPin}</div>
           <div style="font-size:11px;color:var(--muted)">${dReached}/${items.length}</div>
         </div>
+        ${domain === 'language' ? `<div style="font-size:11px;color:var(--muted);line-height:1.5;background:var(--surface);border:1px solid var(--border);border-radius:var(--rs);padding:9px 11px;margin:0 0 8px">
+          Slower expressive speech is common at this age (it affects roughly 1 in 7 toddlers), and many children catch up on their own. Because some don't, and it's hard to predict which, it's worth tracking here and mentioning to the pediatrician. Strong understanding of words is a reassuring sign.
+        </div>` : ''}
         ${items.map(ci => {
           const idx = CDC_ITEMS.indexOf(ci);
           const ms  = (data.milestones||[]).find(m => m.item === ci.item);
@@ -1695,6 +2036,9 @@ function buildMilestones() {
         </div>
         <div style="height:6px;border-radius:3px;background:var(--border);overflow:hidden">
           <div style="height:100%;width:${pct}%;background:var(--accent);border-radius:3px"></div>
+        </div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.5;margin-top:9px">
+          Each item is something most children (about 75%) do by this age, per the CDC. It's a guide for what to watch and talk about, not a test, and not a substitute for your pediatrician's screening.
         </div>
       </div>
       ${domainSections}
@@ -1765,8 +2109,8 @@ function buildGrowth() {
             <div style="font-size:15px;font-weight:800;color:${band.color}">${band.band}</div>
           </div>` : ''}
         </div>
-        ${crossing ? `<div style="background:rgba(248,81,73,.1);border:1px solid rgba(248,81,73,.3);border-radius:var(--rs);padding:9px 11px;margin-bottom:10px;font-size:12px;color:#ffa198;line-height:1.5">
-          ⚠️ Crossed 2+ percentile bands (${esc(crossing.from)} → ${esc(crossing.to)}). Worth mentioning to the pediatrician — don't interpret on its own.
+        ${crossing ? `<div style="background:var(--warn-bg);border:1px solid var(--warn-bd);border-radius:var(--rs);padding:9px 11px;margin-bottom:10px;font-size:12px;color:var(--warn-tx);line-height:1.5">
+          This measurement moved across more than one band (${esc(crossing.from)} → ${esc(crossing.to)}). Re-check the measurement, and mention it to the pediatrician if it holds. A single change like this is often normal and isn't something to read on its own.
         </div>` : ''}
         ${tableNote ? `<div style="font-size:11px;color:var(--muted);margin-bottom:8px;font-style:italic">${tableNote}</div>` : ''}
         ${buildWhoChart(growthData, field, table, unit)}
@@ -1777,7 +2121,7 @@ function buildGrowth() {
               <span style="color:var(--muted)">${g.date} <span style="font-size:10px">(${g.ageMonths}mo)</span></span>
               <div style="display:flex;align-items:center;gap:6px">
                 <span style="font-weight:700">${g[field]} ${unit}</span>
-                <button onclick="confirmDeleteGrowth('${g.id}')" style="background:none;border:none;color:rgba(248,81,73,.45);cursor:pointer;font-size:16px;padding:0;line-height:1">×</button>
+                <button onclick="confirmDeleteGrowth('${g.id}')" style="background:none;border:none;color:var(--muted);opacity:.6;cursor:pointer;font-size:16px;padding:0;line-height:1">×</button>
               </div>
             </div>`).join('')}
         </div>` : ''}
@@ -1793,6 +2137,10 @@ function buildGrowth() {
         <div style="font-size:13px;color:var(--muted)">${growthData.length} measurement${growthData.length!==1?'s':''} logged</div>
         <button onclick="openGrowthModal()" style="background:var(--accent);color:var(--on-accent);border:none;border-radius:var(--rs);padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">+ Add</button>
       </div>
+
+      ${hasData ? `<div style="font-size:12px;color:var(--muted);line-height:1.55;background:var(--surface);border:1px solid var(--border);border-radius:var(--rs);padding:10px 12px;margin-bottom:10px">
+        Percentiles compare Mio with other children the same age and sex. They are a position, not a grade, and there is no "better" end of the range. What matters most is the pattern over time, not any single point.
+      </div>` : ''}
 
       ${!hasData ? `
       <div class="card" style="text-align:center;padding:28px 16px;margin-bottom:10px">
@@ -1936,8 +2284,8 @@ function buildTrends() {
     <div style="padding:12px 13px 0">
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
-        <div class="scard">
-          <div class="s-lbl">Words</div>
+        <div class="scard" onclick="sv('words')" style="cursor:pointer">
+          <div class="s-lbl">Words ›</div>
           <div class="s-val" style="color:var(--accent-l)">${words.length}</div>
           <div class="s-sub">${langStr}</div>
         </div>
@@ -1947,21 +2295,6 @@ function buildTrends() {
           <div class="s-sub">last 14 days</div>
         </div>
       </div>
-
-      ${words.length ? `
-      <div class="card" style="margin-bottom:10px">
-        <div class="card-title">Word list · all languages</div>
-        <div style="max-height:200px;overflow-y:auto">
-          ${words.map(w => `<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border)">
-            <div><span style="font-weight:700">${esc(w.word)}</span>${w.meaning ? `<span style="font-size:12px;color:var(--muted)"> · ${esc(w.meaning)}</span>` : ''}</div>
-            <span style="font-size:11px;color:var(--accent-l);flex-shrink:0;margin-left:8px">${esc(w.language||'')}</span>
-          </div>`).join('')}
-        </div>
-      </div>` : `
-      <div class="card" style="margin-bottom:10px">
-        <div class="card-title">Word list</div>
-        <div style="font-size:13px;color:var(--muted)">No words logged yet. Add them in Home or via the daily check-in.</div>
-      </div>`}
 
       <div class="card" style="margin-bottom:10px">
         <div class="card-title">Last 14 days · ${checkinDone} check-in${checkinDone!==1?'s':''} logged</div>
@@ -2037,7 +2370,10 @@ Growth: WHO P3–P97 bands; flag 2+ crossings for pediatrician — never interpr
 Wellbeing: sleep target 11–14h, active play ~3h, screen time, reading
 Positive parenting: responsive caregiving, narrating daily life, reducing screens
 
-Keep answers focused and parent-friendly. Activities should be concrete and daily-doable.`;
+ANSWER SHAPE — for any question about whether something is normal or concerning, structure the reply in plain prose covering, in this order: what this usually means at Mio's age, how settled or uncertain the evidence is, when it would be worth raising with the pediatrician, and the source(s) behind the answer. For simple or factual questions, answer directly without forcing the structure.
+REFUSALS — when you can't answer because it needs a clinician (e.g. "is Mio delayed?"), don't stop at "I can't diagnose." Briefly say why (it depends on age, hearing, overall development, and direct assessment), then offer to help summarize what the parents have observed for the pediatrician.
+
+Keep answers focused and parent-friendly. Avoid cheerleading and exclamation marks. Activities should be concrete and daily-doable.`;
 }
 
 function buildAdvisor() {
@@ -2235,7 +2571,14 @@ function buildSettings() {
       <input class="set-inp" id="proxyInp" type="url" value="${proxy}" placeholder="https://your-worker.workers.dev" onblur="saveProxyUrl()">
     </div>
 
-    <div class="set-sec">Data</div>
+    <div class="set-sec">Where your data lives</div>
+    <div class="set-row" style="display:block">
+      <div style="font-size:12px;color:var(--muted);line-height:1.6">
+        Mio's data is stored on this device and in your family's own Google Drive file. It is not kept on any Mio Tracker server. When you ask the Advisor a question, the relevant context (age, words, milestones, recent wellbeing and growth) is sent to your configured Claude proxy to generate the reply. Keep a backup so the record is never tied to a single device.
+      </div>
+    </div>
+
+    <div class="set-sec">Backup & restore</div>
     <div class="set-row">
       <div>
         <div class="set-lbl">Export Backup</div>

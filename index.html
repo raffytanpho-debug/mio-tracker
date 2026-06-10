@@ -294,6 +294,7 @@ const DEF = {
   checkinLog: [],    // { date, answeredKeys[], skippedKeys[] }
   immunizations: [], // { id, vaccine, date, source, note }
   activities: [],    // { id, weekOf, day, activity, domain, targetWords[], done }
+  deletedIds: [],    // tombstones: ids removed by the user, so a delete isn't resurrected by sync-merge
   settings: {
     driveFileId: null,
     theme: 'system',
@@ -779,18 +780,23 @@ function mergeData(local, remote) {
   for (const [k,v] of Object.entries(local.safetyStatus||{})) {
     if (!safetyStatus[k] || v > safetyStatus[k]) safetyStatus[k] = v;
   }
+  // Tombstones: union of ids the user deleted on either side. Anything tombstoned
+  // is dropped from the id-keyed collections so a delete is never resurrected.
+  const deleted = new Set([...(local.deletedIds||[]), ...(remote.deletedIds||[])]);
+  const dropDeleted = arr => (arr||[]).filter(x => !deleted.has(x.id));
   return {
     version: Math.max(local.version||1, remote.version||1),
     child,
     settings,
     safetyStatus,
-    growth:       _mergeById(local.growth,       remote.growth),
-    milestones:   _mergeById(local.milestones,   remote.milestones),
-    words:        _mergeById(local.words,         remote.words),
-    immunizations:_mergeById(local.immunizations, remote.immunizations),
-    activities:   _mergeById(local.activities,    remote.activities),
+    growth:       dropDeleted(_mergeById(local.growth,       remote.growth)),
+    milestones:   dropDeleted(_mergeById(local.milestones,   remote.milestones)),
+    words:        dropDeleted(_mergeById(local.words,         remote.words)),
+    immunizations:dropDeleted(_mergeById(local.immunizations, remote.immunizations)),
+    activities:   dropDeleted(_mergeById(local.activities,    remote.activities)),
     wellbeing:    _mergeWellbeing(local.wellbeing,   remote.wellbeing),
     checkinLog:   _mergeCheckinLog(local.checkinLog, remote.checkinLog),
+    deletedIds:   [...deleted],
   };
 }
 
@@ -1261,6 +1267,7 @@ function addObWord() {
 
 function removeWord(wordId) {
   data.words = (data.words||[]).filter(w => w.id !== wordId);
+  tombstone(wordId);
   renderView();
 }
 
@@ -1974,8 +1981,16 @@ function askDeleteWord(id) {
   `);
 }
 
+// Record a tombstone so sync-merge doesn't resurrect a deleted item.
+function tombstone(id) {
+  if (!id) return;
+  if (!data.deletedIds) data.deletedIds = [];
+  if (!data.deletedIds.includes(id)) data.deletedIds.push(id);
+}
+
 async function confirmDeleteWord(id) {
   data.words = (data.words||[]).filter(w => w.id !== id);
+  tombstone(id);
   _wordEdit = null;
   await save();
   closeModal();
@@ -2217,6 +2232,7 @@ function confirmDeleteGrowth(id) {
 
 async function deleteGrowthEntry(id) {
   data.growth = (data.growth||[]).filter(g => g.id !== id);
+  tombstone(id);
   await save();
   closeModal();
   renderView();

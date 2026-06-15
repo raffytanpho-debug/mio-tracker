@@ -312,6 +312,7 @@ let gdriveToken = null;     // in-memory Drive access token (re-minted from sess
 let gdriveSession = null;   // opaque session_id held by the client (the only credential)
 let gdriveFileId = null;
 let gdriveRefreshTimer = null;
+let driveChecking = false;     // true while the initial Drive restore runs (neutral banner)
 let _driveSync = false;        // lock: one sync at a time
 let _driveSyncFailed = false;  // for banner state
 let _db = null;
@@ -595,15 +596,17 @@ function setTheme(v) {
 async function launchApp() {
   await loadData();
   applyTheme(data.settings?.theme || 'system');  // set warm theme before first render
-  // Must await before first render: restores the Drive session and mints a fresh
-  // token so the reconnect banner doesn't flash when the connection is fine.
-  await tryRestoreFolder();
-  // Pre-seed Mio's known words/milestones before first onboarding
+  // Pre-seed Mio's known words/milestones before first onboarding (local only)
   if (!data.settings?.onboardingDone && (data.words||[]).length === 0) {
     seedKnownData();
     await save();
   }
-  sv('home'); // render after restore so the Drive banner reflects real state
+  // Paint immediately from local data; show a neutral "checking" banner if a Drive
+  // session exists, then restore + sync in the background and re-render when done.
+  driveChecking = !!(await dbGet('driveSession'));
+  sv('home');
+  tryRestoreFolder()
+    .finally(() => { driveChecking = false; updateHdr(); renderView(); });
 }
 
 // ═══ DRIVE AUTH (server-side auth-code flow via Cloudflare Worker) ══════════
@@ -964,7 +967,9 @@ function updateHdr() {
   const age = ageStr(dob);
   const mo = ageMonths(dob);
 
-  const driveBanner = !gdriveToken
+  const driveBanner = driveChecking
+    ? `<div class="drive-banner" style="background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.15);color:var(--muted)">⏳ Checking Drive sync…</div>`
+    : !gdriveToken
     ? `<div class="drive-banner">⚠️ Drive not connected — data saved locally <button onclick="connectDrive()">Connect</button></div>`
     : _driveSyncFailed
       ? `<div class="drive-banner" style="background:rgba(227,179,65,.12);border-color:rgba(227,179,65,.3);color:#e3b341">⚠️ Drive sync — last sync had an error. Will retry on next save.</div>`

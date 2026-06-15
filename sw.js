@@ -3,7 +3,7 @@
 // Network-first for HTML documents and all API calls (Google, Cloudflare Worker).
 // Cache-first for static assets (manifest, icon, Chart.js — once added).
 
-const CACHE = 'mio-tracker-v7';
+const CACHE = 'mio-tracker-v8';
 
 const STATIC_ASSETS = [
   './manifest.json',
@@ -34,18 +34,20 @@ self.addEventListener('fetch', e => {
   const req = e.request;
   const url = req.url;
 
-  // App shell (HTML documents): network-first so app code is never stale when
-  // online, but cache each successful response and fall back to that cached
-  // shell when the network fails — instead of a browser error page. This is the
-  // fix for "the app won't load" on flaky networks.
+  // App shell (HTML documents): stale-while-revalidate. Serve the cached shell
+  // instantly (no network wait), then refresh the cache in the background for the
+  // next launch. Falls back to cache when offline. This fixes the 20-30s blank
+  // screen on slow mobile networks where the old network-first wait blocked paint.
   if (req.mode === 'navigate' || req.destination === 'document') {
     e.respondWith(
-      fetch(req).then(res => {
-        const clone = res.clone();
-        e.waitUntil(caches.open(CACHE).then(c => c.put('./index.html', clone)));
-        return res;
-      }).catch(() =>
-        caches.match('./index.html').then(c => c || caches.match('./'))
+      caches.open(CACHE).then(cache =>
+        cache.match('./index.html').then(cached => {
+          const network = fetch(req).then(res => {
+            if (res && res.ok) cache.put('./index.html', res.clone());
+            return res;
+          }).catch(() => cached || cache.match('./'));
+          return cached || network;
+        })
       )
     );
     return;
